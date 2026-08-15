@@ -1,12 +1,17 @@
-"""Command execution boundary.
-
-The scaffold records intent only. It does not execute kubectl, helm, docker,
-or registry commands.
-"""
+"""Command intent helpers for reportable operations."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class CommandResult:
+    """Captured command result."""
+
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
 
 
 @dataclass(frozen=True, slots=True)

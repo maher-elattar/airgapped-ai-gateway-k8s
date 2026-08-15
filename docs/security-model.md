@@ -16,7 +16,7 @@ In scope:
 
 Out of scope for this repository phase:
 
-- Real environment cluster access.
+- Direct production cluster operations.
 - Real secrets.
 - Production identity-provider integration.
 - Browser frontend implementation.
@@ -29,12 +29,12 @@ Out of scope for this repository phase:
 | Consumer credentials | Authenticate application workloads at the gateway | Never store in Git; encrypt at rest in cluster; rotate; redact from logs |
 | Consumer metadata | Drives authorization, rate limits, and observability | Treat as policy source; review changes; avoid accidental permission expansion |
 | Gateway routes and policies | Decide which model each consumer can reach | Declarative source of truth; default-deny model onboarding |
-| Generated gateway data plane | Enforces the runtime policy path | Inspect health; do not manually maintain as source of truth |
+| Generated gateway data plane | Enforces the runtime policy path | Inspect health; make durable changes through authored inputs |
 | agentgateway controller | Reconciles desired state into runtime proxy resources | Least-privilege RBAC; controlled upgrades |
 | NIM Services | Serve model inference and embedding requests | Verify before gateway onboarding; keep model lifecycle separate |
 | Rate-limit state | Prevents one consumer from exhausting platform capacity | Network isolation; availability design matching SLO |
 | Air-gap artifacts | Supply all offline dependencies | Checksums, inventory, private registry import, immutable image references |
-| Logs and metrics | Support audit and troubleshooting | Redact credentials and prompts where required; bound label cardinality |
+| Logs and metrics | Support audit and troubleshooting | Redact credentials and sensitive payloads where required; bound label cardinality |
 | Kubeconfig and operator context | Controls cluster mutation authority | Never commit; verify context before any cluster call |
 
 ## Trust boundaries
@@ -46,7 +46,7 @@ Out of scope for this repository phase:
 | Gateway to NIM Services | Policy-enforced request reaches model Service | Route-specific authorization and NetworkPolicies |
 | Gateway to rate-limit service | Gateway requests quota decisions | NetworkPolicies and fail-safe policy design |
 | Controller to Kubernetes API | Controller reconciles custom resources | Least-privilege RBAC and version-pinned CRDs |
-| Operator workstation to cluster | Human or automation applies source-controlled changes | Context verification and no real production cluster access from this repo |
+| Operator workstation to cluster | Human or automation applies source-controlled changes | Explicit context verification and reviewed apply path |
 | Connected side to air-gap side | Artifacts move into disconnected environment | Checksums, inventory, private registry mapping, no secret material in bundle |
 | Runtime secret store to gateway | Credentials become available to policy | External secret integration or Kubernetes Secret with encryption and RBAC |
 
@@ -56,7 +56,7 @@ Out of scope for this repository phase:
 - Authorized application attempting to call a model outside its entitlement.
 - Compromised application leaking or abusing its gateway credential.
 - Internal operator applying a partial or wrong policy manifest.
-- Developer accidentally committing runtime credentials or environment identifiers.
+- Developer accidentally committing runtime credentials or environment-specific identifiers.
 - Supply-chain actor replacing an air-gap image, chart, or CRD payload.
 - Workload in the cluster attempting lateral movement to NIM or rate-limit services.
 - Browser user extracting a long-lived key from frontend JavaScript.
@@ -71,8 +71,8 @@ Out of scope for this repository phase:
 | Key copied into browser JavaScript | Public credential exposure | Browser calls the application backend; backend stores runtime key outside frontend code |
 | Raw key leaked through logs | Credential compromise | Log redaction; never echo runtime secrets; scanner blocks key-like material |
 | Partial consumer state applied | Existing consumers deleted or permissions changed accidentally | Back up state first; generate full intended state; review diffs; test allowed and denied paths |
-| Generated data-plane Deployment patched manually | Drift; reconciliation overwrite; non-reproducible state | Change declarative inputs only; generated resources are inspected, not maintained |
-| Wrong cluster context | Real environment changed unintentionally | Print and verify context before kubectl; refuse non-disposable contexts in tests |
+| Generated data-plane Deployment patched manually | Drift; reconciliation overwrite; non-reproducible state | Change authored inputs instead of editing reconciled output |
+| Wrong cluster context | Real environment changed unintentionally | Print and verify context before any cluster-changing command; fail closed on mismatch |
 | Air-gap artifact replaced | Untrusted runtime code | SHA-256 inventory; private registry import; immutable tags or digests |
 | Cross-namespace backend target added casually | Unauthorized namespace trust | Keep same namespace by default; require explicit ReferenceGrant for cross-namespace routing |
 | Rate-limit service unavailable or bypassed | Quota policy fails or traffic outage | Decide fail behavior deliberately; isolate with NetworkPolicies; design HA if SLO requires |
@@ -121,7 +121,7 @@ Normal logs and generated reports must not include:
 - API keys.
 - Secret values.
 - kubeconfig material.
-- private environment domains or registry names.
+- environment-specific domains or registry names.
 - raw Authorization headers.
 
 Scripts and tests must print object names and status, not secret payloads.
@@ -155,13 +155,11 @@ Cleanup must verify whether traffic still depends on the gateway before deleting
 
 ### Context verification
 
-Before any kubectl call in future test phases:
+Any cluster-changing workflow exposed by this project must:
 
-- Print the current Kubernetes context.
-- Verify it is the expected disposable kind context.
-- Refuse to continue otherwise.
-
-This repository must not access or modify a real production cluster.
+- print the current Kubernetes context;
+- verify it matches the explicitly configured expected context;
+- refuse to continue when the expected context is missing or does not match.
 
 ## Default-deny model onboarding
 

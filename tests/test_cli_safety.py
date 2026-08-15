@@ -65,7 +65,7 @@ def test_deploy_apply_refuses_missing_confirmation(capsys: pytest.CaptureFixture
     assert "confirm" in capsys.readouterr().err
 
 
-def test_apply_command_accepts_exact_context_and_confirmation(
+def test_apply_command_refuses_without_saved_plan_after_safety_inputs(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     code = main(
@@ -78,13 +78,14 @@ def test_apply_command_accepts_exact_context_and_confirmation(
             EXPECTED_CONTEXT,
             "--confirm",
             CONFIRMATION,
+            "--apply-mode",
+            "server-side-dry-run",
         ]
     )
 
-    output = capsys.readouterr().out
-    assert code == 0
-    assert "safety-gated skeleton" in output
-    assert "deploy apply" in output
+    error = capsys.readouterr().err
+    assert code == 2
+    assert "plan-file" in error
 
 
 def test_cutover_rollback_and_destroy_are_safety_gated(

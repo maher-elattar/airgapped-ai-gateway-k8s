@@ -2,7 +2,7 @@
 
 ## Context
 
-The gateway requires consumer credentials and may require backend credentials in future integrations. The tested v1.3.1 path used raw API keys in Kubernetes Secret objects because the source evidence did not treat the hashed-key path as reliable for that baseline.
+The gateway requires consumer credentials and may require backend credentials in future integrations. The v1.3.1 baseline documents the raw-key runtime path and keeps hashed-key support in the upgrade validation track.
 
 This is a production limitation, not a desired end state.
 
@@ -49,7 +49,7 @@ For future production designs:
 
 Future validation must prove:
 
-- secret scanner blocks known secret patterns and environment identifiers;
+- secret scanner blocks known secret patterns and environment-specific identifiers;
 - no real secret files are tracked;
 - generated reports redact secret values;
 - missing or invalid credentials fail with 401;

@@ -1,8 +1,8 @@
 # Air-Gapped AI Gateway Platform
 
-This repository is a reference implementation for an air-gapped Kubernetes AI gateway based on a real delivery pattern.
+This repository is a reference implementation for an air-gapped Kubernetes AI gateway.
 
-It intentionally contains no private environment domains, private registry names, kubeconfig material, API keys, image archives, chart archives, rendered third-party CRDs, binary handover files, or generated handover artifacts.
+It contains fake examples, authored manifests, validation scripts, and documentation. Runtime secrets, kubeconfig material, binary image bundles, chart archives, and generated operational outputs stay outside Git.
 
 Delivered baseline to preserve:
 
@@ -15,17 +15,17 @@ Newer component versions, if added, must live in a separate compatibility track 
 
 ## Repository status
 
-Phase 0 initializes the local-only clean repository, source-review documentation, context log, Git hygiene, and secret boundary.
-
-No remote is configured. Do not push or publish until a later phase explicitly approves it.
+The repository currently includes the architecture contract, typed Python CLI scaffold, Kustomize manifests, offline validation, and local diagram assets.
 
 ## Architecture contract
 
-The repository-level architecture contract is defined in [docs/architecture.md](docs/architecture.md). Generated runtime resources are inspected for verification and troubleshooting, but they are never manually maintained as the source of truth.
+The repository-level architecture contract is defined in [docs/architecture.md](docs/architecture.md). Durable platform changes are made through authored source: configuration, manifests, schemas, scripts, and tests.
 
-## CLI scaffold
+## CLI
 
-The first implementation surface is a typed Python CLI. It is intentionally offline-first in this phase.
+The first implementation surface is a typed Python CLI. Plan and render workflows
+are offline-capable. State-changing workflows are gated by a saved plan, an exact
+expected context, an apply mode, a confirmation token, and a pre-change snapshot.
 
 Install the project in a clean environment:
 
@@ -46,7 +46,8 @@ Render fake-only scaffold manifests:
 make render
 ```
 
-Apply-style commands are safety-gated. They refuse to proceed unless the operator supplies the exact configured disposable context and confirmation token. The scaffold does not run `kubectl`.
+Apply-style commands execute only actions listed in an approved plan and write
+redacted reports and command logs.
 
 ## Kubernetes manifests
 

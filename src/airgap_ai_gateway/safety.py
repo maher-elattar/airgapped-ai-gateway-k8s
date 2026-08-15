@@ -31,7 +31,7 @@ def ensure_mutation_is_confirmed(
     if expected_context is None or expected_context != configured_context:
         msg = (
             f"{action} refused: pass --expected-context {configured_context!r}. "
-            "The scaffold does not infer or inspect the current cluster context."
+            "The CLI does not infer or inspect the current cluster context."
         )
         raise SafetyError(msg)
 
@@ -45,5 +45,5 @@ def mutation_state(action: str) -> str:
     """Return the current implementation state for a command."""
 
     if action in MUTATING_ACTIONS:
-        return "safety-gated skeleton; no kubectl call is implemented in this phase"
-    return "offline skeleton"
+        return "requires approved plan, exact context, apply mode, confirmation, and pre-change snapshot"
+    return "offline plan"

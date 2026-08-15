@@ -1,11 +1,11 @@
 # Declarative Kubernetes Source of Truth
 
-This directory contains the authored Kubernetes source of truth for the
+This directory contains the authored Kubernetes source for the
 air-gapped AI gateway platform.
 
-The rule is intentionally strict: generated data-plane resources are inspected
-after reconciliation, but they are not maintained here as authored manifests.
-If runtime behavior must change, the declarative input changes first.
+The manifests define controller inputs and owned supporting resources. Runtime
+objects produced by Kubernetes controllers are operational output; durable
+behavior changes are made by updating the authored input manifests.
 
 The delivered baseline is kept under `baseline-v1.3.1`:
 
@@ -19,6 +19,6 @@ The delivered baseline is kept under `baseline-v1.3.1`:
   an external HA Redis contract instead of pretending one in-cluster Redis pod is
   production-ready.
 
-Normal renders must not create `Secret` objects. Runtime key material is provided
+Normal renders do not create `Secret` objects. Runtime key material is provided
 by an external secret integration that writes the documented Secret name and
-labels at deployment time.
+labels for the target environment.

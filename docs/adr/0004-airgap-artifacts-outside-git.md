@@ -2,7 +2,7 @@
 
 ## Context
 
-An air-gapped installation needs container images, chart packages, CRDs, rendered manifests, checksums, and transfer records. The private implementation evidence contained binary images, chart archives, rendered third-party CRDs, rendered manifests, and generated handover artifacts. Those are evidence, not clean public source.
+An air-gapped installation needs container images, chart packages, CRDs, rendered manifests, checksums, and transfer records. Those runtime and transfer artifacts are necessary operational material, but they are not the authored source of this reference implementation.
 
 This repository must be safe to publish and reproducible from declarative inputs.
 
@@ -24,11 +24,11 @@ The repository must not contain:
 - image archives;
 - chart archives;
 - rendered third-party CRDs;
-- rendered environment manifests;
+- rendered environment-specific manifests;
 - generated run directories;
-- DOCX/PDF handover artifacts;
-- nested delivery ZIP files;
-- private registry names;
+- generated operator packages;
+- nested delivery archives;
+- environment-specific registry names;
 - runtime secrets.
 
 ## Alternatives
@@ -52,8 +52,8 @@ The repository must not contain:
 
 Acceptance checks must verify:
 
-- no archive or handover binary is tracked;
+- no binary delivery artifact is tracked;
 - no rendered third-party CRD is tracked as source;
 - no generated run directory is tracked;
-- no private registry or domain identifier appears;
+- no environment-specific registry or domain identifier appears;
 - clean scripts or docs explain how artifacts are discovered, checksummed, transferred, loaded, and mapped to a private registry.

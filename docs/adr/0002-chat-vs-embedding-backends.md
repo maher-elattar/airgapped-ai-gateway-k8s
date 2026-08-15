@@ -2,7 +2,7 @@
 
 ## Context
 
-The delivered baseline is agentgateway v1.3.1. In the tested source evidence, OpenAI-compatible chat endpoints worked naturally through AgentgatewayBackend configured as an AI provider backend. Embedding endpoints did not behave like chat completions and should not be forced into a chat-style abstraction.
+The delivered baseline is agentgateway v1.3.1. In this baseline, OpenAI-compatible chat endpoints use AgentgatewayBackend configured as an AI provider backend. Embedding endpoints are treated as a different API shape and should not be forced into a chat-style abstraction.
 
 The embedding route still needs gateway policy. The difference is only the final backend representation.
 

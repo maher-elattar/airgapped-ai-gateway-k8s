@@ -14,7 +14,7 @@ This repository documents that contract as a reference implementation. The basel
 
 ## Visual architecture sequence
 
-The diagrams below are stored locally in this repository so the documentation does not depend on the Medium CDN at runtime. They are used as architecture illustrations, not as vendor endorsements.
+The diagrams below are stored locally in this repository so the documentation does not depend on remote image hosting. They are used as architecture illustrations, not as vendor endorsements.
 
 ### 1. Where the AI Gateway fits
 
@@ -49,7 +49,7 @@ The controller watches Kubernetes resources and reconciles the desired state. Th
 - if the Gateway is not programmed, start with the controller and the Kubernetes resources it watches;
 - if the Gateway is programmed but requests fail, inspect the data plane, routes, policies, rate-limit path, or backend Services.
 
-Generated data-plane resources are inspected, but they are never manually maintained as the source of truth.
+The data plane is reconciled from the declared Gateway resources. Troubleshooting can inspect runtime objects, while durable changes remain in the authored inputs.
 
 ### 4. Treat chat and embedding APIs differently
 
@@ -82,19 +82,17 @@ The Gateway is declarative intent. The controller turns that intent into a runni
 
 For the retained-edge pattern, the generated Service can stay internal. The public edge forwards to it only after internal tests pass. If the edge is removed in a greenfield environment, the exposure mechanism changes, but the route and policy model should not need to change.
 
-## Repository-level source-of-truth contract
+## Repository-level authoring contract
 
-All generated runtime resources are inspected but never manually maintained as the source of truth.
+The repository defines the platform inputs and validation rules.
 
 That contract drives the whole repository:
 
-- Checked-in source is the authority: documentation, future templates, future Kustomize or Helm values, and retained scripts.
-- Controller-generated Deployments and Services may be inspected for health and drift, but not permanently edited with ad hoc patching.
-- If a generated resource needs different behavior, the declarative input that produces it must change.
-- Rendered manifests and generated run directories are operational outputs, not normal Git source.
-- Air-gap payloads such as image archives, chart archives, rendered third-party CRDs, DOCX/PDF handover files, and generated handover artifacts stay outside Git.
-
-No phase may leave `kubectl set`, `kubectl patch`, or `kubectl edit` as the source of truth.
+- Checked-in source contains documentation, schemas, Kustomize manifests, validation scripts, and tests.
+- Controller-reconciled resources can be inspected for health and troubleshooting.
+- Persistent behavior changes are made by changing the source inputs that produce runtime state.
+- Rendered manifests, generated run directories, and offline bundle payloads are operational outputs.
+- Runtime credentials and binary air-gap payloads are stored in environment-specific systems outside this repository.
 
 ## Retained NGINX edge versus greenfield direct exposure
 
@@ -168,7 +166,7 @@ These controls belong at the gateway layer so that each NIM deployment does not 
 
 ![Consumer identity attached to gateway metrics](assets/diagrams/article/10-consumer-metrics.png)
 
-Consumer identity should remain a bounded metric dimension. It should identify stable workloads, not arbitrary people or prompt text.
+Consumer identity should remain a bounded metric dimension. It should identify stable workloads, not arbitrary people or request payload contents.
 
 ## Prove the policy path before changing production traffic
 

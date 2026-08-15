@@ -4,7 +4,7 @@
 
 The platform needs one stable entry point for internal AI traffic while keeping model authorization understandable as the number of models and consumers grows.
 
-The source evidence used a single model gateway and one HTTPRoute per model. That kept the model-to-policy relationship direct: if an application is denied on one model but allowed on another, the operator can inspect one route and one policy boundary for that model.
+The reference architecture uses a single model gateway and one HTTPRoute per model. That keeps the model-to-policy relationship direct: if an application is denied on one model but allowed on another, the operator can inspect one route and one policy boundary for that model.
 
 ## Decision
 

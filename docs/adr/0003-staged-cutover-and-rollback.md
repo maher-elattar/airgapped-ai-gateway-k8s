@@ -4,7 +4,7 @@
 
 The platform may be introduced into an environment that already has a working public or internal edge path to NIM Services. The goal is to add policy and observability without making traffic migration and gateway installation one irreversible action.
 
-The reusable source workflow separates discovery, installation, internal verification, edge cutover, public verification, and rollback.
+The operating model separates discovery, installation, internal verification, edge cutover, public verification, and rollback.
 
 ## Decision
 
