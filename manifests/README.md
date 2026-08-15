@@ -1,13 +1,24 @@
-# Declarative Kubernetes Source
+# Declarative Kubernetes Source of Truth
 
-This directory is reserved for checked-in Kubernetes source of truth.
+This directory contains the authored Kubernetes source of truth for the
+air-gapped AI gateway platform.
 
-The scaffold phase keeps runtime behavior safe:
+The rule is intentionally strict: generated data-plane resources are inspected
+after reconciliation, but they are not maintained here as authored manifests.
+If runtime behavior must change, the declarative input changes first.
 
-- example configuration is validated offline;
-- render output is generated into ignored working directories;
-- no generated runtime resource is manually maintained here;
-- no `kubectl` command is run by the scaffold.
+The delivered baseline is kept under `baseline-v1.3.1`:
 
-Future implementation phases should add baseline manifests under versioned directories and keep generated controller resources out of this tree.
+- `bases/` contains namespace, Gateway API, agentgateway policy, model route,
+  backend Service contracts, and demo rate-limit resources.
+- `overlays/kind-demo/` is a single-node disposable profile and is labeled
+  demo-only.
+- `overlays/retained-nginx-edge/` keeps the existing edge as the public entry
+  point and forwards only inference paths to the internal gateway Service.
+- `overlays/production-reference/` makes availability choices explicit and uses
+  an external HA Redis contract instead of pretending one in-cluster Redis pod is
+  production-ready.
 
+Normal renders must not create `Secret` objects. Runtime key material is provided
+by an external secret integration that writes the documented Secret name and
+labels at deployment time.

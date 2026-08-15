@@ -1,0 +1,56 @@
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: policy-qwen-chat
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: policy-qwen-chat
+    app.kubernetes.io/component: model-authorization-policy
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: qwen-chat
+    ai.gateway/route: route-qwen-chat
+  annotations:
+    ai.gateway/consumer-id-expression: apiKey.metadata.consumer_id
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: route-qwen-chat
+  traffic:
+    apiKeyAuthentication:
+      mode: Strict
+      location:
+        header:
+          name: x-api-key
+      secretRef:
+        name: agentgateway-consumer-keys
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          - "apiKey.metadata.permissions.exists(permission, permission == 'allow_qwen_chat')"
+    rateLimit:
+      global:
+        backendRef:
+          kind: Service
+          name: envoy-ratelimit
+          namespace: ai-gateway
+          port: 8081
+        failureMode: FailClosed
+        domain: ai-gateway
+        descriptors:
+          - entries:
+              - name: consumer_id
+                expression: apiKey.metadata.consumer_id
+              - name: model
+                expression: "'qwen-chat'"
+            unit: Requests
+            limitOverride: '{"unit":"minute","requestsPerUnit":120}'
+          - entries:
+              - name: consumer_id
+                expression: apiKey.metadata.consumer_id
+              - name: model
+                expression: "'qwen-chat'"
+            unit: Tokens
+            limitOverride: '{"unit":"minute","requestsPerUnit":12000}'

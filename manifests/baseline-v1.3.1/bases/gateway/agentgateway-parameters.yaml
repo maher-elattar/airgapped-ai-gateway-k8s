@@ -1,0 +1,80 @@
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: ai-gateway-parameters
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: ai-gateway
+    app.kubernetes.io/component: gateway-parameters
+    app.kubernetes.io/part-of: ai-gateway
+    airgap.ai.gateway/baseline: v1.3.1
+spec:
+  workload:
+    kind: Deployment
+  image:
+    registry: registry.example.internal:5000
+    repository: agentgateway/agentgateway
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    pullPolicy: IfNotPresent
+  logging:
+    level: info
+    format: json
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  shutdown:
+    min: 5
+    max: 30
+  deployment:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-gateway
+        app.kubernetes.io/component: agentgateway-data-plane
+        app.kubernetes.io/part-of: ai-gateway
+    spec:
+      replicas: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: ai-gateway
+            app.kubernetes.io/component: agentgateway-data-plane
+            app.kubernetes.io/part-of: ai-gateway
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: agentgateway-data-plane
+  service:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-gateway
+        app.kubernetes.io/component: generated-data-plane-service
+        app.kubernetes.io/part-of: ai-gateway
+    spec:
+      type: ClusterIP
+  serviceAccount:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-gateway
+        app.kubernetes.io/component: generated-data-plane-service-account
+        app.kubernetes.io/part-of: ai-gateway
+  podDisruptionBudget:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-gateway
+        app.kubernetes.io/component: generated-data-plane-pdb
+        app.kubernetes.io/part-of: ai-gateway
+    spec:
+      minAvailable: 1

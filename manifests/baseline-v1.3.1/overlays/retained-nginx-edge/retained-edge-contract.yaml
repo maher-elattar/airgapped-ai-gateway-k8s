@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: retained-nginx-edge-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: retained-nginx-edge-contract
+    app.kubernetes.io/component: edge-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  profile: retained-nginx-edge
+  publicEntryPointOwner: retained-edge-team
+  gatewayServiceExposure: internal-clusterip-generated-by-agentgateway-controller
+  cutoverScope: edge-upstream-change-only-after-internal-policy-tests-pass
+  rollbackScope: restore-previous-edge-upstream-before-decommissioning-gateway
+  exposedPaths: /v1/chat/completions,/v1/embeddings

@@ -1,0 +1,32 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: envoy-ratelimit
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: envoy-ratelimit
+    app.kubernetes.io/component: rate-limit-service
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: envoy-ratelimit
+      app.kubernetes.io/component: rate-limit-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: demo-counter-store
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: demo-counter-store

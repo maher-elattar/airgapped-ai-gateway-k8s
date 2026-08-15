@@ -1,0 +1,8 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: envoy-ratelimit
+  namespace: ai-gateway
+spec:
+  replicas: 1

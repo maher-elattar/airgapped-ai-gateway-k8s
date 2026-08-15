@@ -26,6 +26,11 @@ repos:
         entry: pymarkdown --config .pymarkdown.yml scan README.md docs
         language: system
         pass_filenames: false
+      - id: manifest-validation
+        name: manifest validation
+        entry: python scripts/validate_manifests.py
+        language: system
+        pass_filenames: false
       - id: portfolio-secret-boundary
         name: portfolio secret boundary
         entry: scripts/secret-scan.sh --staged

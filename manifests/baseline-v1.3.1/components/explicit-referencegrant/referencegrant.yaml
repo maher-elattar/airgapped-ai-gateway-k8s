@@ -1,0 +1,19 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: allow-ai-gateway-routes-to-model-services
+  namespace: model-runtime
+  labels:
+    app.kubernetes.io/name: allow-ai-gateway-routes-to-model-services
+    app.kubernetes.io/component: explicit-cross-namespace-grant
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/disabled-by-default: "true"
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: ai-gateway
+  to:
+    - group: ""
+      kind: Service

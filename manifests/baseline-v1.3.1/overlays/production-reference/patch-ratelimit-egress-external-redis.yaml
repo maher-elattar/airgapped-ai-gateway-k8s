@@ -1,0 +1,16 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ratelimit-egress-to-redis
+  namespace: ai-gateway
+  annotations:
+    airgap.ai.gateway/production-reference-cidr: replace-with-approved-external-redis-egress-cidr
+spec:
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.10/32
+      ports:
+        - protocol: TCP
+          port: 6379

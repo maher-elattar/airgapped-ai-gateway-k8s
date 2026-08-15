@@ -1,0 +1,69 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: qwen-nim
+    app.kubernetes.io/component: nim-service-contract
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: qwen-chat
+    ai.gateway/api-shape: chat
+  annotations:
+    airgap.ai.gateway/owner-boundary: service-contract-only-nim-workload-owned-outside-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: qwen-nim
+    app.kubernetes.io/component: nim-runtime
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gemma-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: gemma-nim
+    app.kubernetes.io/component: nim-service-contract
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: gemma-chat
+    ai.gateway/api-shape: chat
+  annotations:
+    airgap.ai.gateway/owner-boundary: service-contract-only-nim-workload-owned-outside-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: gemma-nim
+    app.kubernetes.io/component: nim-runtime
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: embedding-nim
+    app.kubernetes.io/component: nim-service-contract
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: embedding-index
+    ai.gateway/api-shape: embedding
+  annotations:
+    airgap.ai.gateway/owner-boundary: service-contract-only-nim-workload-owned-outside-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: embedding-nim
+    app.kubernetes.io/component: nim-runtime
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

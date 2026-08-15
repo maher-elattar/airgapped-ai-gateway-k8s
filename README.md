@@ -47,3 +47,21 @@ make render
 ```
 
 Apply-style commands are safety-gated. They refuse to proceed unless the operator supplies the exact configured disposable context and confirmation token. The scaffold does not run `kubectl`.
+
+## Kubernetes manifests
+
+The authored Kubernetes source of truth is under [manifests/baseline-v1.3.1](manifests/baseline-v1.3.1).
+
+The baseline provides Kustomize bases and three overlays:
+
+- `kind-demo`: disposable, demo-only, single-replica profile.
+- `retained-nginx-edge`: brownfield profile where the existing edge remains the public entry point.
+- `production-reference`: HA-oriented reference profile that requires an external HA Redis contract instead of rendering the demo Redis workload.
+
+Validate the manifests without a cluster:
+
+```bash
+python scripts/validate_manifests.py
+```
+
+If standalone `kustomize` is installed, the validator also runs `kustomize build` for every overlay.

@@ -1,0 +1,36 @@
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: qwen-chat-backend
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: qwen-chat-backend
+    app.kubernetes.io/component: chat-backend
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: qwen-chat
+    ai.gateway/backend-type: agentgateway-backend
+spec:
+  ai:
+    provider:
+      openai: {}
+      host: qwen-nim.ai-gateway.svc.cluster.local
+      port: 8000
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: gemma-chat-backend
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: gemma-chat-backend
+    app.kubernetes.io/component: chat-backend
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: gemma-chat
+    ai.gateway/backend-type: agentgateway-backend
+spec:
+  ai:
+    provider:
+      openai: {}
+      host: gemma-nim.ai-gateway.svc.cluster.local
+      port: 8000

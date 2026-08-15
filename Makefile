@@ -22,6 +22,7 @@ render:
 
 validate:
 	airgap-ai-gateway --config $(CONFIG) discover
+	$(PYTHON) scripts/validate_manifests.py
 
 diagrams:
 	$(PYTHON) scripts/verify_assets.py

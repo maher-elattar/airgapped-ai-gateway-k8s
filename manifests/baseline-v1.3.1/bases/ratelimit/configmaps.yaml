@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-ratelimit-config
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: envoy-ratelimit
+    app.kubernetes.io/component: rate-limit-config
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  config.yaml: |
+    domain: ai-gateway
+    descriptors:
+      - key: consumer_id
+        value: internal-chat
+        descriptors:
+          - key: model
+            value: qwen-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 120
+          - key: model
+            value: gemma-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 120
+      - key: consumer_id
+        value: rag-indexer
+        descriptors:
+          - key: model
+            value: embedding-index
+            rate_limit:
+              unit: minute
+              requests_per_unit: 300
+      - key: consumer_id
+        value: testing-client
+        descriptors:
+          - key: model
+            value: gemma-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 30
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-redis-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: demo-counter-store-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  profile: demo-only
+  persistence: emptyDir-not-production
+  productionRule: production-reference must use an external HA Redis contract or an explicit persistent Redis design.

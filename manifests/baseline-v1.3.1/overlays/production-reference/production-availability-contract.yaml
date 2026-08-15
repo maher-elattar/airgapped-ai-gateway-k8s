@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-availability-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: production-availability-contract
+    app.kubernetes.io/component: availability-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  profile: production-reference
+  gatewayDataPlane: three-replicas-through-AgentgatewayParameters
+  rateLimitService: three-replicas-with-pdb-and-topology-spread
+  redis: external-ha-redis-required
+  persistence: external-redis-platform-owned-persistence-required
+  demoRedis: deleted-from-production-reference-output
+  environmentOverlayRequired: replace-example-redis-endpoint-and-egress-cidr-before-real-production-use

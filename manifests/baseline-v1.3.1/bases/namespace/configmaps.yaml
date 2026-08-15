@@ -1,0 +1,46 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: airgap-ai-gateway-platform
+    app.kubernetes.io/component: contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  baseline.agentgateway: v1.3.1
+  baseline.gatewayApi: v1.5.0-experimental
+  sourceOfTruth: authored-kustomize-inputs
+  generatedDataPlane: inspect-only-never-edit-as-source
+  exposedPaths: /v1/chat/completions,/v1/embeddings
+  privateRegistry: registry.example.internal:5000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: external-secret-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: airgap-ai-gateway-platform
+    app.kubernetes.io/component: secret-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  secretName: agentgateway-consumer-keys
+  requiredLabel.ai.gateway.runtime-secret: consumer-api-keys
+  requiredKeyShape: |
+    Each key in the runtime Secret data represents one application consumer.
+    The value must be JSON understood by agentgateway API key authentication.
+    Runtime material is written by the approved external secret integration.
+  fakeExampleOnly: |
+    {
+      "key": "REPLACE_AT_RUNTIME",
+      "metadata": {
+        "consumer_id": "internal-chat",
+        "tier": "standard",
+        "permissions": ["allow_qwen_chat", "allow_gemma_chat"]
+      }
+    }
+  productionBoundary: |
+    This repository does not render Secret, stringData, provider credentials,
+    kubeconfig material, or long-lived browser JavaScript keys.

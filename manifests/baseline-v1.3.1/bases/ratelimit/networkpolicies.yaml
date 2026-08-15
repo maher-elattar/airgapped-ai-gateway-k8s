@@ -1,0 +1,77 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ratelimit-ingress-from-gateway
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-ratelimit-ingress-from-gateway
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: envoy-ratelimit
+      app.kubernetes.io/component: rate-limit-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agentgateway-data-plane
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ratelimit-egress-to-redis
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-ratelimit-egress-to-redis
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: envoy-ratelimit
+      app.kubernetes.io/component: rate-limit-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+              app.kubernetes.io/component: demo-counter-store
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress-from-ratelimit
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-redis-ingress-from-ratelimit
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: demo-counter-store
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy-ratelimit
+              app.kubernetes.io/component: rate-limit-service
+      ports:
+        - protocol: TCP
+          port: 6379

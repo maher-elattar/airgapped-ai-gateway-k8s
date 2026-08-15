@@ -1,0 +1,17 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../bases
+  - production-availability-contract.yaml
+  - external-ha-redis-service.yaml
+labels:
+  - pairs:
+      ai.gateway/profile: production-reference
+      ai.gateway/demo-only: "false"
+    includeSelectors: false
+patches:
+  - path: patch-agentgateway-parameters.yaml
+  - path: patch-ratelimit-production.yaml
+  - path: patch-ratelimit-egress-external-redis.yaml
+  - path: delete-demo-redis.yaml

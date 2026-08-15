@@ -1,0 +1,73 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: default-deny
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-edge-to-gateway-data-plane
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-edge-to-gateway-data-plane
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agentgateway-data-plane
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              ai.gateway/edge-access: allowed
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: edge-proxy
+      ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress-to-inference-and-ratelimit
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-gateway-egress-to-inference-and-ratelimit
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agentgateway-data-plane
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: nim-runtime
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy-ratelimit
+      ports:
+        - protocol: TCP
+          port: 8081

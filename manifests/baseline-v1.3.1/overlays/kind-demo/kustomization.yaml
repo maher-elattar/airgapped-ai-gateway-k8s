@@ -1,0 +1,14 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../bases
+  - profile-contract.yaml
+labels:
+  - pairs:
+      ai.gateway/profile: kind-demo
+      ai.gateway/demo-only: "true"
+    includeSelectors: false
+patches:
+  - path: patch-agentgateway-parameters.yaml
+  - path: patch-ratelimit-demo.yaml

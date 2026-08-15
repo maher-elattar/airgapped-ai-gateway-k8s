@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-demo-profile-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: kind-demo-profile-contract
+    app.kubernetes.io/component: profile-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  profile: kind-demo
+  demoOnly: "true"
+  expectedContext: kind-airgap-ai-gateway
+  availability: single-replica-demo-only
+  clusterAccess: static-validation-only-in-this-phase

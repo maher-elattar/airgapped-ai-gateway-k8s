@@ -1,0 +1,37 @@
+---
+overlay: retained-nginx-edge
+resourceCount: 34
+kinds:
+  AgentgatewayBackend: 2
+  AgentgatewayParameters: 1
+  AgentgatewayPolicy: 4
+  ConfigMap: 5
+  Deployment: 2
+  Gateway: 1
+  HTTPRoute: 3
+  Namespace: 1
+  NetworkPolicy: 6
+  PodDisruptionBudget: 2
+  Service: 5
+  ServiceAccount: 2
+routes:
+  - model: embedding-index
+    route: route-embedding-index
+  - model: gemma-chat
+    route: route-gemma-chat
+  - model: qwen-chat
+    route: route-qwen-chat
+policies:
+  - model: embedding-index
+    policy: policy-embedding-index
+  - model: gemma-chat
+    policy: policy-gemma-chat
+  - model: qwen-chat
+    policy: policy-qwen-chat
+images:
+  - name: ai-gateway-parameters/agentgateway
+    ref: registry.example.internal:5000/agentgateway/agentgateway@sha256:1111111111111111111111111111111111111111111111111111111111111111
+  - name: envoy-ratelimit/envoy-ratelimit
+    ref: registry.example.internal:5000/envoyproxy/ratelimit@sha256:3333333333333333333333333333333333333333333333333333333333333333
+  - name: redis/redis
+    ref: registry.example.internal:5000/library/redis@sha256:4444444444444444444444444444444444444444444444444444444444444444
