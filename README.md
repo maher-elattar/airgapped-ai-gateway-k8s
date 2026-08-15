@@ -78,3 +78,13 @@ cluster:
 ```bash
 make airgap-demo
 ```
+
+## Disposable end-to-end lab
+
+The kind-based lab is documented in [docs/kind-e2e-lab.md](docs/kind-e2e-lab.md).
+It uses repository-owned OpenAI-compatible mock model services and writes
+evidence under ignored run directories.
+
+```bash
+make kind-test
+```

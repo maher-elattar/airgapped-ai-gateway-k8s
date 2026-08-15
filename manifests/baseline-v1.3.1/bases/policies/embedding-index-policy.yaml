@@ -11,7 +11,7 @@ metadata:
     ai.gateway/model-key: embedding-index
     ai.gateway/route: route-embedding-index
   annotations:
-    ai.gateway/consumer-id-expression: apiKey.metadata.consumer_id
+    ai.gateway/consumer-id-expression: apiKey.consumer_id
 spec:
   targetRefs:
     - group: gateway.networking.k8s.io
@@ -29,7 +29,7 @@ spec:
       action: Require
       policy:
         matchExpressions:
-          - "apiKey.metadata.permissions.exists(permission, permission == 'allow_embedding_index')"
+          - "apiKey.permissions.exists(permission, permission == 'allow_embedding_index')"
     rateLimit:
       global:
         backendRef:
@@ -42,8 +42,7 @@ spec:
         descriptors:
           - entries:
               - name: consumer_id
-                expression: apiKey.metadata.consumer_id
+                expression: apiKey.consumer_id
               - name: model
                 expression: "'embedding-index'"
             unit: Requests
-            limitOverride: '{"unit":"minute","requestsPerUnit":300}'

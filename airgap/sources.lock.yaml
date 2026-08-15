@@ -164,3 +164,39 @@ spec:
       ociDigest: sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278
       license: Apache-2.0
       provenance: Local test registry fixture image for disposable validation.
+
+    - name: fixture-kind-node
+      artifactType: oci-image
+      version: v1.31.0
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/kindest/node@sha256:7fbc5644a803286a69ff9c5695f03bb01b512896835e15df7df17f756f7245ac
+      destinationName: >-
+        registry.example.internal:5000/test-fixtures/kindest-node@sha256:7fbc5644a803286a69ff9c5695f03bb01b512896835e15df7df17f756f7245ac
+      ociDigest: sha256:7fbc5644a803286a69ff9c5695f03bb01b512896835e15df7df17f756f7245ac
+      license: Apache-2.0
+      provenance: kind node linux/amd64 image used by disposable validation.
+
+    - name: fixture-python-base
+      artifactType: oci-image
+      version: 3.12-alpine
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/library/python@sha256:285a71327884a4d50efbea30104473b0fa43ecefa499458899670ca30dae76e5
+      destinationName: >-
+        registry.example.internal:5000/test-fixtures/python@sha256:285a71327884a4d50efbea30104473b0fa43ecefa499458899670ca30dae76e5
+      ociDigest: sha256:285a71327884a4d50efbea30104473b0fa43ecefa499458899670ca30dae76e5
+      license: Python-2.0
+      provenance: Pinned Python base image for the repository-owned OpenAI mock.
+
+    - name: fixture-nginx-edge
+      artifactType: oci-image
+      version: 1.27.5-alpine
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/library/nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+      destinationName: >-
+        registry.example.internal:5000/library/nginx@sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+      ociDigest: sha256:62223d644fa234c3a1cc785ee14242ec47a77364226f1c811d2f669f96dc2ac8
+      license: BSD-2-Clause
+      provenance: Optional NGINX edge image for retained-edge disposable validation.

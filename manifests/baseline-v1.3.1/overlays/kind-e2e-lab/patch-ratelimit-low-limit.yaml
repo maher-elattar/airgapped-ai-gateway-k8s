@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-ratelimit-config
+  namespace: ai-gateway
+data:
+  config.yaml: |
+    domain: ai-gateway
+    descriptors:
+      - key: consumer_id
+        value: internal-chat
+        descriptors:
+          - key: model
+            value: qwen-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 120
+          - key: model
+            value: gemma-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 120
+      - key: consumer_id
+        value: rag-indexer
+        descriptors:
+          - key: model
+            value: embedding-index
+            rate_limit:
+              unit: minute
+              requests_per_unit: 300
+      - key: consumer_id
+        value: low-limit
+        descriptors:
+          - key: model
+            value: gemma-chat
+            rate_limit:
+              unit: minute
+              requests_per_unit: 2

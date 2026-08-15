@@ -119,7 +119,7 @@ def test_registry_promotion_plan_contains_exact_copy_and_existence_checks() -> N
     plan = build_registry_promotion_plan(load_source_lock(LOCK))
 
     assert plan["status"] == "planned"
-    assert plan["actionCount"] == 6
+    assert plan["actionCount"] == 9
     actions_list = cast(list[dict[str, Any]], plan["actions"])
     actions = {str(action["name"]): action for action in actions_list}
     ratelimit = actions["envoy-ratelimit"]

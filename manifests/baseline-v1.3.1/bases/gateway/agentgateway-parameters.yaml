@@ -10,8 +10,6 @@ metadata:
     app.kubernetes.io/part-of: ai-gateway
     airgap.ai.gateway/baseline: v1.3.1
 spec:
-  workload:
-    kind: Deployment
   image:
     registry: registry.example.internal:5000
     repository: agentgateway/agentgateway

@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/component: gateway-metrics-policy
     app.kubernetes.io/part-of: ai-gateway
   annotations:
-    ai.gateway/consumer-id-expression: apiKey.metadata.consumer_id
+    ai.gateway/consumer-id-expression: apiKey.consumer_id
 spec:
   targetRefs:
     - group: gateway.networking.k8s.io
@@ -20,8 +20,8 @@ spec:
       attributes:
         add:
           - name: consumer_id
-            expression: apiKey.metadata.consumer_id
+            expression: apiKey.consumer_id
           - name: consumer_tier
-            expression: apiKey.metadata.tier
+            expression: apiKey.tier
           - name: application_environment
-            expression: apiKey.metadata.environment
+            expression: apiKey.environment

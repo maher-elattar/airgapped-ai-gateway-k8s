@@ -1,0 +1,57 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-broken-backend
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: route-broken-backend
+    app.kubernetes.io/component: model-route
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: broken-backend
+    ai.gateway/api-shape: chat
+spec:
+  hostnames:
+    - broken.ai.example.internal
+  parentRefs:
+    - name: ai-gateway
+      namespace: ai-gateway
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /v1/chat/completions
+      backendRefs:
+        - name: missing-nim
+          namespace: ai-gateway
+          port: 8000
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: policy-broken-backend
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: policy-broken-backend
+    app.kubernetes.io/component: model-authorization-policy
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: broken-backend
+    ai.gateway/route: route-broken-backend
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: route-broken-backend
+  traffic:
+    apiKeyAuthentication:
+      mode: Strict
+      location:
+        header:
+          name: x-api-key
+      secretRef:
+        name: agentgateway-consumer-keys
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          - "apiKey.permissions.exists(permission, permission == 'allow_qwen_chat')"

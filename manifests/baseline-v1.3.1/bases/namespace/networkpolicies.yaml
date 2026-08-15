@@ -17,6 +17,33 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-dns-egress
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-dns-egress
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-edge-to-gateway-data-plane
   namespace: ai-gateway
   labels:
@@ -26,7 +53,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: agentgateway-data-plane
+      gateway.networking.k8s.io/gateway-name: ai-gateway
   policyTypes:
     - Ingress
   ingress:
@@ -53,7 +80,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: agentgateway-data-plane
+      gateway.networking.k8s.io/gateway-name: ai-gateway
   policyTypes:
     - Egress
   egress:

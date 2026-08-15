@@ -1,6 +1,6 @@
 ---
 overlay: production-reference
-resourceCount: 29
+resourceCount: 30
 kinds:
   AgentgatewayBackend: 2
   AgentgatewayParameters: 1
@@ -10,7 +10,7 @@ kinds:
   Gateway: 1
   HTTPRoute: 3
   Namespace: 1
-  NetworkPolicy: 5
+  NetworkPolicy: 6
   PodDisruptionBudget: 1
   Service: 5
   ServiceAccount: 1

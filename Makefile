@@ -33,7 +33,7 @@ diagrams:
 	$(PYTHON) scripts/verify_assets.py
 
 kind-test:
-	@echo "kind integration tests are not implemented in this scaffold phase; no kubectl command is run."
+	$(PYTHON) scripts/kind_e2e_lab.py run
 
 security-scan:
 	scripts/secret-scan.sh --all

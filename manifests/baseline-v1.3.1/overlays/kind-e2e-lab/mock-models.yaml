@@ -1,0 +1,293 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mock-model-runtime
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: mock-model-runtime
+    app.kubernetes.io/component: nim-runtime
+    app.kubernetes.io/part-of: ai-gateway
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: qwen-nim
+    app.kubernetes.io/component: nim-runtime
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: qwen-chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qwen-nim
+      app.kubernetes.io/component: nim-runtime
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qwen-nim
+        app.kubernetes.io/component: nim-runtime
+        app.kubernetes.io/part-of: ai-gateway
+        ai.gateway/model-key: qwen-chat
+    spec:
+      serviceAccountName: mock-model-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openai-mock
+          image: registry.example.internal:5000/airgap-ai-gateway/openai-mock:e2e-lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODEL_ID
+              value: qwen-chat
+            - name: MOCK_KIND
+              value: chat
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gemma-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: gemma-nim
+    app.kubernetes.io/component: nim-runtime
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: gemma-chat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gemma-nim
+      app.kubernetes.io/component: nim-runtime
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gemma-nim
+        app.kubernetes.io/component: nim-runtime
+        app.kubernetes.io/part-of: ai-gateway
+        ai.gateway/model-key: gemma-chat
+    spec:
+      serviceAccountName: mock-model-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openai-mock
+          image: registry.example.internal:5000/airgap-ai-gateway/openai-mock:e2e-lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODEL_ID
+              value: gemma-chat
+            - name: MOCK_KIND
+              value: chat
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: embedding-nim
+    app.kubernetes.io/component: nim-runtime
+    app.kubernetes.io/part-of: ai-gateway
+    ai.gateway/model-key: embedding-index
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: embedding-nim
+      app.kubernetes.io/component: nim-runtime
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: embedding-nim
+        app.kubernetes.io/component: nim-runtime
+        app.kubernetes.io/part-of: ai-gateway
+        ai.gateway/model-key: embedding-index
+    spec:
+      serviceAccountName: mock-model-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openai-mock
+          image: registry.example.internal:5000/airgap-ai-gateway/openai-mock:e2e-lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MODEL_ID
+              value: embedding-index
+            - name: MOCK_KIND
+              value: embedding
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-ingress-to-mock-models
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: allow-gateway-ingress-to-mock-models
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: nim-runtime
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              gateway.networking.k8s.io/gateway-name: ai-gateway
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qwen-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: qwen-nim
+    app.kubernetes.io/component: nim-runtime-pdb
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qwen-nim
+      app.kubernetes.io/component: nim-runtime
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gemma-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: gemma-nim
+    app.kubernetes.io/component: nim-runtime-pdb
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gemma-nim
+      app.kubernetes.io/component: nim-runtime
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: embedding-nim
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: embedding-nim
+    app.kubernetes.io/component: nim-runtime-pdb
+    app.kubernetes.io/part-of: ai-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: embedding-nim
+      app.kubernetes.io/component: nim-runtime

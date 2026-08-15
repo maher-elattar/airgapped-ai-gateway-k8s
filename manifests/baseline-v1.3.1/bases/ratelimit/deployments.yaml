@@ -55,6 +55,8 @@ spec:
               value: ratelimit
             - name: RUNTIME_WATCH_ROOT
               value: "false"
+            - name: RUNTIME_IGNOREDOTFILES
+              value: "true"
             - name: REDIS_SOCKET_TYPE
               value: tcp
             - name: REDIS_URL

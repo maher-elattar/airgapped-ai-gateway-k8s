@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-e2e-lab-contract
+  namespace: ai-gateway
+  labels:
+    app.kubernetes.io/name: kind-e2e-lab
+    app.kubernetes.io/component: lab-contract
+    app.kubernetes.io/part-of: ai-gateway
+data:
+  purpose: disposable-kind-end-to-end-validation
+  modelRuntime: repository-owned-openai-compatible-mocks
+  secretMode: runtime-only-fake-test-credentials
+  reports: JUnit, JSON, and Markdown evidence under the lab run directory

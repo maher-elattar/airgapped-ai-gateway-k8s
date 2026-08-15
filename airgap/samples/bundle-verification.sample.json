@@ -1,8 +1,8 @@
 {
-  "artifactCount": 14,
+  "artifactCount": 17,
   "bundleDir": "dist/airgap-bundles/baseline-v1.3.1",
   "compatibilitySet": "baseline-v1.3.1",
-  "logicalInventoryDigest": "32599065f6bfd084602a1e006f497197d1496053773b442e652f804600332022",
+  "logicalInventoryDigest": "a1aff17bae8a5821e425c3becd6feae8d8243551b60f7c39c1f2663d10add789",
   "networkRequests": 0,
   "sample": true,
   "status": "verified"

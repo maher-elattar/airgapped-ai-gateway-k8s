@@ -11,7 +11,7 @@ metadata:
     ai.gateway/model-key: qwen-chat
     ai.gateway/route: route-qwen-chat
   annotations:
-    ai.gateway/consumer-id-expression: apiKey.metadata.consumer_id
+    ai.gateway/consumer-id-expression: apiKey.consumer_id
 spec:
   targetRefs:
     - group: gateway.networking.k8s.io
@@ -29,7 +29,7 @@ spec:
       action: Require
       policy:
         matchExpressions:
-          - "apiKey.metadata.permissions.exists(permission, permission == 'allow_qwen_chat')"
+          - "apiKey.permissions.exists(permission, permission == 'allow_qwen_chat')"
     rateLimit:
       global:
         backendRef:
@@ -42,15 +42,13 @@ spec:
         descriptors:
           - entries:
               - name: consumer_id
-                expression: apiKey.metadata.consumer_id
+                expression: apiKey.consumer_id
               - name: model
                 expression: "'qwen-chat'"
             unit: Requests
-            limitOverride: '{"unit":"minute","requestsPerUnit":120}'
           - entries:
               - name: consumer_id
-                expression: apiKey.metadata.consumer_id
+                expression: apiKey.consumer_id
               - name: model
                 expression: "'qwen-chat'"
             unit: Tokens
-            limitOverride: '{"unit":"minute","requestsPerUnit":12000}'

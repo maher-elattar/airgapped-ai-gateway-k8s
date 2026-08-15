@@ -1,0 +1,35 @@
+{
+  "cluster": "agw-e2e-sample",
+  "context": "kind-agw-e2e-sample",
+  "imageAudit": {
+    "images": [
+      "localhost:5001/agentgateway/controller:v1.3.1",
+      "localhost:5001/airgap-ai-gateway/openai-mock:e2e-lab"
+    ],
+    "publicImages": [],
+    "status": "passed"
+  },
+  "registry": "localhost:5001",
+  "results": [
+    {
+      "detail": "expected=401 actual=401",
+      "durationSeconds": 0.031,
+      "name": "internal-gateway: missing key returns 401",
+      "status": "passed"
+    },
+    {
+      "detail": "expected=200 actual=200",
+      "durationSeconds": 0.043,
+      "name": "internal-gateway: allowed embedding consumer returns 200 with vector",
+      "status": "passed"
+    },
+    {
+      "detail": "statuses=[200, 200, 429]",
+      "durationSeconds": 0.082,
+      "name": "internal-gateway: repeated traffic reaches 429",
+      "status": "passed"
+    }
+  ],
+  "sample": true,
+  "status": "passed"
+}

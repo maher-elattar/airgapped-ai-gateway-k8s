@@ -355,7 +355,7 @@ def _validate_backend_types(documents: list[Manifest]) -> list[str]:
 
 def _validate_consumer_id_flow(documents: list[Manifest]) -> list[str]:
     errors: list[str] = []
-    expected_expression = "apiKey.metadata.consumer_id"
+    expected_expression = "apiKey.consumer_id"
     metric_policy = next(
         (
             item

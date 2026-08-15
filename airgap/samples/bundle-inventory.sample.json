@@ -24,12 +24,20 @@
       "name": "kustomize",
       "path": "payloads/kustomize.json",
       "sha256": "7112041fe0a525c1fbda56d62ec674509ce2ce38be8ac9ba5860504f3f414df0"
+    },
+    {
+      "artifactType": "oci-image",
+      "destinationName": "registry.example.internal:5000/test-fixtures/kindest-node@sha256:7fbc5644a803286a69ff9c5695f03bb01b512896835e15df7df17f756f7245ac",
+      "lockHash": "sha256:7fbc5644a803286a69ff9c5695f03bb01b512896835e15df7df17f756f7245ac",
+      "name": "fixture-kind-node",
+      "path": "payloads/fixture-kind-node.json",
+      "sha256": "8cbb580856626038e7fb4c6c52e15d7d7658eaa2f9cebb32073851bd7dd6bece"
     }
   ],
   "compatibilitySet": "baseline-v1.3.1",
   "kind": "AirgapBundleInventory",
   "lockName": "baseline-v1-3-1-airgap-sources",
-  "logicalInventoryDigest": "32599065f6bfd084602a1e006f497197d1496053773b442e652f804600332022",
+  "logicalInventoryDigest": "a1aff17bae8a5821e425c3becd6feae8d8243551b60f7c39c1f2663d10add789",
   "networkRequiredForVerification": false,
   "sample": true,
   "truncatedForDocumentation": true

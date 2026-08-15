@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="kind-e2e-lab" tests="3" failures="0">
+  <testcase name="internal-gateway: missing key returns 401" time="0.031">
+  </testcase>
+  <testcase name="internal-gateway: allowed embedding consumer returns 200 with vector" time="0.043">
+  </testcase>
+  <testcase name="internal-gateway: repeated traffic reaches 429" time="0.082">
+  </testcase>
+</testsuite>
