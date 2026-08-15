@@ -30,6 +30,6 @@ policies:
     policy: policy-qwen-chat
 images:
   - name: ai-gateway-parameters/agentgateway
-    ref: registry.example.internal:5000/agentgateway/agentgateway@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    ref: registry.example.internal:5000/agentgateway/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
   - name: envoy-ratelimit/envoy-ratelimit
-    ref: registry.example.internal:5000/envoyproxy/ratelimit@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ref: registry.example.internal:5000/envoyproxy/ratelimit@sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c

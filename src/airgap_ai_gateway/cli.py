@@ -8,6 +8,17 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
 
+from airgap_ai_gateway.airgap_bundle import (
+    DEFAULT_COMPATIBILITY_SET,
+    DEFAULT_DIST_DIR,
+    DEFAULT_LOCK_PATH,
+    DEFAULT_PRIVATE_REGISTRY,
+    DEFAULT_PROMOTION_TOOL,
+    DEFAULT_RENDERED_OVERLAY,
+    build_bundle,
+    verify_bundle,
+    verify_rendered_manifests_against_lock,
+)
 from airgap_ai_gateway.configuration import load_config
 from airgap_ai_gateway.discovery import discover
 from airgap_ai_gateway.errors import AirgapGatewayError
@@ -68,15 +79,72 @@ def build_parser() -> argparse.ArgumentParser:
 
     bundle = subcommands.add_parser("bundle", help="Build or verify an offline dependency bundle.")
     bundle_sub = bundle.add_subparsers(dest="bundle_command", required=True)
-    _add_simple_command(bundle_sub, "build", "Plan an offline bundle build.", action="bundle build")
-    _add_simple_command(
-        bundle_sub, "verify", "Verify an offline bundle manifest.", action="bundle verify"
+    bundle_build = bundle_sub.add_parser(
+        "build", help="Build deterministic connected-side bundle audit artifacts."
+    )
+    _add_bundle_lock_arguments(bundle_build)
+    bundle_build.add_argument(
+        "--dist-dir",
+        type=Path,
+        default=DEFAULT_DIST_DIR,
+        help=f"Bundle output root excluded from Git. Default: {DEFAULT_DIST_DIR}",
+    )
+    bundle_build.add_argument(
+        "--split-size-bytes",
+        type=int,
+        default=None,
+        help="Optional transfer-media part size in bytes.",
+    )
+    bundle_build.add_argument(
+        "--metadata-hook",
+        action="append",
+        default=[],
+        help="Optional declared metadata hook such as sbom, signature, or malware-scan.",
+    )
+    bundle_build.set_defaults(
+        handler=_handle_bundle_build,
+        action="bundle build",
+        mutating=False,
+    )
+
+    bundle_verify = bundle_sub.add_parser(
+        "verify", help="Verify a disconnected-side bundle without network access."
+    )
+    _add_bundle_lock_arguments(bundle_verify)
+    bundle_verify.add_argument(
+        "--bundle-dir",
+        type=Path,
+        default=DEFAULT_DIST_DIR / DEFAULT_COMPATIBILITY_SET,
+        help="Bundle directory containing inventory.json.",
+    )
+    bundle_verify.set_defaults(
+        handler=_handle_bundle_verify,
+        action="bundle verify",
+        mutating=False,
     )
 
     registry = subcommands.add_parser("registry", help="Promote images into a private registry.")
     registry_sub = registry.add_subparsers(dest="registry_command", required=True)
     promote = registry_sub.add_parser(
         "promote", help="Plan image promotion into the private registry."
+    )
+    _add_bundle_lock_arguments(promote)
+    promote.add_argument(
+        "--tool",
+        choices=("skopeo", "docker"),
+        default=DEFAULT_PROMOTION_TOOL,
+        help="Preferred promotion command family.",
+    )
+    promote.add_argument(
+        "--skip-existing-check",
+        action="store_true",
+        help="Omit destination existence checks from the plan.",
+    )
+    promote.add_argument(
+        "--output-file",
+        type=Path,
+        default=None,
+        help="Optional path for the JSON promotion plan.",
     )
     promote.set_defaults(
         handler=_handle_registry_promote, action="registry promote", mutating=False
@@ -90,6 +158,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     verify = subcommands.add_parser("verify", help="Plan the verification checks.")
+    verify.add_argument("--overlay", default=DEFAULT_RENDERED_OVERLAY)
+    verify.add_argument("--lock-file", type=Path, default=DEFAULT_LOCK_PATH)
+    verify.add_argument("--compatibility-set", default=DEFAULT_COMPATIBILITY_SET)
+    verify.add_argument("--registry", default=DEFAULT_PRIVATE_REGISTRY)
     verify.set_defaults(handler=_handle_verify, action="verify", mutating=False)
 
     cutover = subcommands.add_parser("cutover", help="Plan or apply traffic cutover.")
@@ -242,6 +314,25 @@ def _add_execution_plan_command(
     )
 
 
+def _add_bundle_lock_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--lock-file",
+        type=Path,
+        default=DEFAULT_LOCK_PATH,
+        help=f"Immutable air-gap source lock. Default: {DEFAULT_LOCK_PATH}",
+    )
+    parser.add_argument(
+        "--compatibility-set",
+        default=DEFAULT_COMPATIBILITY_SET,
+        help=f"Compatibility set to use. Default: {DEFAULT_COMPATIBILITY_SET}",
+    )
+    parser.add_argument(
+        "--registry",
+        default=DEFAULT_PRIVATE_REGISTRY,
+        help=f"Internal registry expected in promoted images. Default: {DEFAULT_PRIVATE_REGISTRY}",
+    )
+
+
 def _handle_plan(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     ensure_mutation_is_confirmed(
@@ -339,15 +430,64 @@ def _handle_discover(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_bundle_build(args: argparse.Namespace) -> int:
+    print(
+        to_json(
+            build_bundle(
+                lock_path=args.lock_file,
+                compatibility_set=args.compatibility_set,
+                output_dir=args.dist_dir,
+                private_registry=args.registry,
+                split_size_bytes=args.split_size_bytes,
+                metadata_hooks=tuple(args.metadata_hook),
+            )
+        )
+    )
+    return 0
+
+
+def _handle_bundle_verify(args: argparse.Namespace) -> int:
+    print(
+        to_json(
+            verify_bundle(
+                bundle_dir=args.bundle_dir,
+                lock_path=args.lock_file,
+                compatibility_set=args.compatibility_set,
+                private_registry=args.registry,
+            )
+        )
+    )
+    return 0
+
+
 def _handle_registry_promote(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    print(to_json(promotion_plan(config)))
+    print(
+        to_json(
+            promotion_plan(
+                config,
+                lock_file=args.lock_file,
+                compatibility_set=args.compatibility_set,
+                private_registry=args.registry,
+                check_existing=not args.skip_existing_check,
+                tool=args.tool,
+                output_file=args.output_file,
+            )
+        )
+    )
     return 0
 
 
 def _handle_verify(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    print(to_json(verification_plan(config)))
+    report = verification_plan(config)
+    report["rendered_manifest_images"] = verify_rendered_manifests_against_lock(
+        lock_path=args.lock_file,
+        compatibility_set=args.compatibility_set,
+        overlay=args.overlay,
+        private_registry=args.registry,
+    )
+    print(to_json(report))
     return 0
 
 

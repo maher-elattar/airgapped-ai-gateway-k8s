@@ -1,0 +1,166 @@
+---
+apiVersion: airgap.ai.gateway/v1alpha1
+kind: AirgapSourceLock
+metadata:
+  name: baseline-v1-3-1-airgap-sources
+spec:
+  compatibilitySets:
+    - name: baseline-v1.3.1
+      description: agentgateway v1.3.1 with Gateway API v1.5.0 experimental
+      platform: linux/amd64
+  entries:
+    - name: gateway-api-crds
+      artifactType: kubernetes-crds
+      version: v1.5.0
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/experimental-install.yaml
+      destinationName: gateway-api/experimental-install-v1.5.0.yaml
+      sha256: f7cc7d309a7ad9d316938341046ed81c40e787d8082f0b281df3926289a7a445
+      license: Apache-2.0
+      provenance: Kubernetes Gateway API experimental release artifact.
+
+    - name: agentgateway-crds-chart
+      artifactType: helm-chart
+      version: v1.3.1
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: oci://cr.agentgateway.dev/charts/agentgateway-crds:v1.3.1
+      destinationName: charts/agentgateway-crds-v1.3.1.tgz
+      sha256: 4d66be934dac6d9ba1e7cf663fce33a0c8417fdc3613c145eb83b581a8fd1bf0
+      license: Apache-2.0
+      provenance: agentgateway CRD Helm chart release artifact.
+
+    - name: agentgateway-controller-chart
+      artifactType: helm-chart
+      version: v1.3.1
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: oci://cr.agentgateway.dev/charts/agentgateway:v1.3.1
+      destinationName: charts/agentgateway-v1.3.1.tgz
+      sha256: 4b27576722ed373c7d677f2252061a03fd2b550b761023d7642677f8bc2b65fc
+      license: Apache-2.0
+      provenance: agentgateway controller Helm chart release artifact.
+
+    - name: agentgateway-controller
+      artifactType: oci-image
+      version: v1.3.1
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        cr.agentgateway.dev/controller@sha256:02c74ef7f7f2fcd6e8e13306229f0e912e2f7287ba67bbcd3a4b9597666b413b
+      destinationName: >-
+        registry.example.internal:5000/agentgateway/controller@sha256:02c74ef7f7f2fcd6e8e13306229f0e912e2f7287ba67bbcd3a4b9597666b413b
+      ociDigest: sha256:02c74ef7f7f2fcd6e8e13306229f0e912e2f7287ba67bbcd3a4b9597666b413b
+      license: Apache-2.0
+      provenance: agentgateway controller linux/amd64 image release artifact.
+
+    - name: agentgateway
+      artifactType: oci-image
+      version: v1.3.1
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        cr.agentgateway.dev/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
+      destinationName: >-
+        registry.example.internal:5000/agentgateway/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
+      ociDigest: sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
+      license: Apache-2.0
+      provenance: agentgateway generated data-plane linux/amd64 image release artifact.
+
+    - name: redis
+      artifactType: oci-image
+      version: 7.2.5-alpine
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/library/redis@sha256:015185fd658093359cc83aa8396e06c1f39ba36df3c93f79528ec23ab409e73f
+      destinationName: >-
+        registry.example.internal:5000/library/redis@sha256:015185fd658093359cc83aa8396e06c1f39ba36df3c93f79528ec23ab409e73f
+      ociDigest: sha256:015185fd658093359cc83aa8396e06c1f39ba36df3c93f79528ec23ab409e73f
+      license: BSD-3-Clause
+      provenance: Redis demo counter-store linux/amd64 image artifact.
+
+    - name: envoy-ratelimit
+      artifactType: oci-image
+      version: 837de552
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/envoyproxy/ratelimit@sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c
+      destinationName: >-
+        registry.example.internal:5000/envoyproxy/ratelimit@sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c
+      ociDigest: sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c
+      license: Apache-2.0
+      provenance: Envoy ratelimit linux/amd64 image pinned by commit-derived tag.
+
+    - name: python-pyyaml-wheel
+      artifactType: python-wheel
+      version: 6.0.3
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        https://files.pythonhosted.org/packages/71/60/917329f640924b18ff085ab889a11c763e0b573da888e8404ff486657602/pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      destinationName: wheels/pyyaml-6.0.3-cp311-linux-x86_64.whl
+      sha256: b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d
+      license: MIT
+      provenance: Runtime Python dependency wheel for CPython 3.11 linux x86_64.
+
+    - name: kustomize
+      artifactType: tool-archive
+      version: v5.7.1
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz
+      destinationName: tools/kustomize/v5.7.1/linux-amd64.tar.gz
+      sha256: ea375e7372f9aa029129d4b2d16c66b7750b7f1213c4f66f910d981c895818d8
+      license: Apache-2.0
+      provenance: Kustomize linux/amd64 release archive.
+
+    - name: helm
+      artifactType: tool-archive
+      version: v3.15.4
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: https://get.helm.sh/helm-v3.15.4-linux-amd64.tar.gz
+      destinationName: tools/helm/v3.15.4/linux-amd64.tar.gz
+      sha256: 11400fecfc07fd6f034863e4e0c4c4445594673fd2a129e701fe41f31170cfa9
+      license: Apache-2.0
+      provenance: Helm linux/amd64 release archive.
+
+    - name: skopeo
+      artifactType: tool-source
+      version: v1.18.0
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: https://github.com/containers/skopeo/archive/refs/tags/v1.18.0.tar.gz
+      destinationName: tools/skopeo/v1.18.0/source.tar.gz
+      sha256: 8a711db2bba3a357bebbbaf607ec731df6ea24c2d3cd9e0fef5e8fe9cefb154b
+      license: Apache-2.0
+      provenance: Skopeo source release used for reproducible toolchain packaging.
+
+    - name: kubeconform
+      artifactType: tool-archive
+      version: v0.6.7
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+      destinationName: tools/kubeconform/v0.6.7/linux-amd64.tar.gz
+      sha256: 95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73
+      license: Apache-2.0
+      provenance: kubeconform linux/amd64 release archive for schema validation.
+
+    - name: fixture-agnhost
+      artifactType: oci-image
+      version: "2.45"
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        registry.k8s.io/e2e-test-images/agnhost@sha256:10dd8bf67770d5585be4ace8f90f020ee7cba2afc1201b8f946c7f7a66d05dae
+      destinationName: >-
+        registry.example.internal:5000/test-fixtures/agnhost@sha256:10dd8bf67770d5585be4ace8f90f020ee7cba2afc1201b8f946c7f7a66d05dae
+      ociDigest: sha256:10dd8bf67770d5585be4ace8f90f020ee7cba2afc1201b8f946c7f7a66d05dae
+      license: Apache-2.0
+      provenance: Kubernetes e2e test fixture image for disposable validation.
+
+    - name: fixture-registry
+      artifactType: oci-image
+      version: 2.8.3
+      compatibilitySet: baseline-v1.3.1
+      canonicalSource: >-
+        docker.io/library/registry@sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278
+      destinationName: >-
+        registry.example.internal:5000/test-fixtures/registry@sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278
+      ociDigest: sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278
+      license: Apache-2.0
+      provenance: Local test registry fixture image for disposable validation.

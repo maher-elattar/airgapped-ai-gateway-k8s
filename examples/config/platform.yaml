@@ -26,18 +26,22 @@ registry:
   strict_airgap: true
   images:
     - name: agentgateway
-      source: cr.agentgateway.dev/agentgateway:v1.3.1
+      source: >-
+        cr.agentgateway.dev/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
       target: >-
-        registry.example.internal:5000/agentgateway/agentgateway@sha256:1111111111111111111111111111111111111111111111111111111111111111
+        registry.example.internal:5000/agentgateway/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141
     - name: agentgateway-controller
-      source: cr.agentgateway.dev/controller:v1.3.1
+      source: >-
+        cr.agentgateway.dev/controller@sha256:02c74ef7f7f2fcd6e8e13306229f0e912e2f7287ba67bbcd3a4b9597666b413b
       target: >-
-        registry.example.internal:5000/agentgateway/controller@sha256:2222222222222222222222222222222222222222222222222222222222222222
+        registry.example.internal:5000/agentgateway/controller@sha256:02c74ef7f7f2fcd6e8e13306229f0e912e2f7287ba67bbcd3a4b9597666b413b
     - name: envoy-ratelimit
-      source: envoyproxy/ratelimit:main
+      source: >-
+        docker.io/envoyproxy/ratelimit@sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c
       target: >-
-        registry.example.internal:5000/envoyproxy/ratelimit@sha256:3333333333333333333333333333333333333333333333333333333333333333
+        registry.example.internal:5000/envoyproxy/ratelimit@sha256:a8661ef320aaffbf4f10c15b40a5bd47906a7256d5c67bbf20de7fd33e562d7c
     - name: redis
-      source: redis:7-alpine
+      source: >-
+        docker.io/library/redis@sha256:015185fd658093359cc83aa8396e06c1f39ba36df3c93f79528ec23ab409e73f
       target: >-
-        registry.example.internal:5000/library/redis@sha256:4444444444444444444444444444444444444444444444444444444444444444
+        registry.example.internal:5000/library/redis@sha256:015185fd658093359cc83aa8396e06c1f39ba36df3c93f79528ec23ab409e73f

@@ -1,0 +1,36 @@
+{
+  "apiVersion": "airgap.ai.gateway/v1alpha1",
+  "artifacts": [
+    {
+      "artifactType": "kubernetes-crds",
+      "destinationName": "gateway-api/experimental-install-v1.5.0.yaml",
+      "lockHash": "f7cc7d309a7ad9d316938341046ed81c40e787d8082f0b281df3926289a7a445",
+      "name": "gateway-api-crds",
+      "path": "payloads/gateway-api-crds.json",
+      "sha256": "7e2ca369c789a8f0b00a558c459e99969b69053f241b76385c04d7a0fb87d7db"
+    },
+    {
+      "artifactType": "oci-image",
+      "destinationName": "registry.example.internal:5000/agentgateway/agentgateway@sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141",
+      "lockHash": "sha256:2e25455a0185f3c5a0e0f5e0f36ccc860c754d4d26632bfa5cc41c2f5bd35141",
+      "name": "agentgateway",
+      "path": "payloads/agentgateway.json",
+      "sha256": "92e4db674ac3e9db0a0bceb4f413d308893fe20a2f3c79828de1109f170868b4"
+    },
+    {
+      "artifactType": "tool-archive",
+      "destinationName": "tools/kustomize/v5.7.1/linux-amd64.tar.gz",
+      "lockHash": "ea375e7372f9aa029129d4b2d16c66b7750b7f1213c4f66f910d981c895818d8",
+      "name": "kustomize",
+      "path": "payloads/kustomize.json",
+      "sha256": "7112041fe0a525c1fbda56d62ec674509ce2ce38be8ac9ba5860504f3f414df0"
+    }
+  ],
+  "compatibilitySet": "baseline-v1.3.1",
+  "kind": "AirgapBundleInventory",
+  "lockName": "baseline-v1-3-1-airgap-sources",
+  "logicalInventoryDigest": "32599065f6bfd084602a1e006f497197d1496053773b442e652f804600332022",
+  "networkRequiredForVerification": false,
+  "sample": true,
+  "truncatedForDocumentation": true
+}

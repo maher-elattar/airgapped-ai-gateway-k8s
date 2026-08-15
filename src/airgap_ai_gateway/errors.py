@@ -27,3 +27,7 @@ class DiscoveryError(AirgapGatewayError):
 
 class VerificationError(AirgapGatewayError):
     """Raised when a verification check fails."""
+
+
+class BundleError(AirgapGatewayError):
+    """Raised when an air-gap bundle lock, build, or verification check fails."""

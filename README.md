@@ -66,3 +66,15 @@ python scripts/validate_manifests.py
 ```
 
 If standalone `kustomize` is installed, the validator also runs `kustomize build` for every overlay.
+
+## Air-gap bundle workflow
+
+The connected build side and disconnected verification/install side are
+documented in [docs/airgap-bundle.md](docs/airgap-bundle.md).
+
+Build and verify the deterministic bundle audit artifacts without touching a
+cluster:
+
+```bash
+make airgap-demo
+```
