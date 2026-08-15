@@ -2,7 +2,7 @@
 
 ## Context
 
-An air-gapped installation needs container images, chart packages, CRDs, rendered manifests, checksums, and transfer records. The source archive contained binary images, chart archives, rendered third-party CRDs, rendered manifests, and generated handover artifacts. Those are evidence, not clean public source.
+An air-gapped installation needs container images, chart packages, CRDs, rendered manifests, checksums, and transfer records. The private implementation evidence contained binary images, chart archives, rendered third-party CRDs, rendered manifests, and generated handover artifacts. Those are evidence, not clean public source.
 
 This repository must be safe to publish and reproducible from declarative inputs.
 

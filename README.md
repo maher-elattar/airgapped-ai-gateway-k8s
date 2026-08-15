@@ -22,3 +22,28 @@ No remote is configured. Do not push or publish until a later phase explicitly a
 ## Architecture contract
 
 The repository-level architecture contract is defined in [docs/architecture.md](docs/architecture.md). Generated runtime resources are inspected for verification and troubleshooting, but they are never manually maintained as the source of truth.
+
+## CLI scaffold
+
+The first implementation surface is a typed Python CLI. It is intentionally offline-first in this phase.
+
+Install the project in a clean environment:
+
+```bash
+python -m pip install -c constraints.txt -r requirements-dev.txt -e .
+```
+
+Inspect the command tree:
+
+```bash
+airgap-ai-gateway --help
+airgap-ai-gateway deploy apply --help
+```
+
+Render fake-only scaffold manifests:
+
+```bash
+make render
+```
+
+Apply-style commands are safety-gated. They refuse to proceed unless the operator supplies the exact configured disposable context and confirmation token. The scaffold does not run `kubectl`.

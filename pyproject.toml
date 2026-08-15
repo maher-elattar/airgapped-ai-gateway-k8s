@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=80.9"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airgap-ai-gateway-platform"
+version = "0.1.0"
+description = "air-gapped Kubernetes AI gateway platform CLI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+  { name = "Ahmed Maher" }
+]
+dependencies = [
+  "PyYAML==6.0.3"
+]
+
+[project.scripts]
+airgap-ai-gateway = "airgap_ai_gateway.cli:entrypoint"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+airgap_ai_gateway = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=airgap_ai_gateway --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["airgap_ai_gateway"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "C4", "E", "F", "I", "RUF", "SIM", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+packages = ["airgap_ai_gateway"]

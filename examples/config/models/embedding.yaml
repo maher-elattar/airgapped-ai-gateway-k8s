@@ -1,0 +1,15 @@
+---
+models:
+  - key: embedding-index
+    display_name: Embedding Index
+    kind: embedding
+    host: embed.ai.example.internal
+    route_path: /v1/embeddings
+    permission: allow_embedding_index
+    backend: kubernetes-service
+    service:
+      name: embedding-nim
+      namespace: ai-gateway
+      ports:
+        - name: http
+          number: 8000

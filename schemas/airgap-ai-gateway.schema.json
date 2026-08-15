@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/airgap-ai-gateway.schema.json",
+  "title": "Air-Gapped AI Gateway Configuration",
+  "type": "object",
+  "required": ["platform", "cluster", "gateway", "rate_limit", "registry", "models", "consumers"],
+  "properties": {
+    "platform": {
+      "type": "object",
+      "required": [
+        "name",
+        "agentgateway_version",
+        "gateway_api_version",
+        "confirmation_token"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "agentgateway_version": { "type": "string", "const": "v1.3.1" },
+        "gateway_api_version": { "type": "string", "const": "v1.5.0-experimental" },
+        "confirmation_token": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "cluster": {
+      "type": "object",
+      "required": ["expected_context"],
+      "properties": {
+        "expected_context": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "gateway": {
+      "type": "object",
+      "required": [
+        "namespace",
+        "name",
+        "hostname_wildcard",
+        "reference_grant_mode",
+        "exposure_mode"
+      ],
+      "properties": {
+        "namespace": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "hostname_wildcard": { "type": "string", "minLength": 1 },
+        "reference_grant_mode": {
+          "type": "string",
+          "enum": ["same-namespace-only", "explicit"]
+        },
+        "exposure_mode": {
+          "type": "string",
+          "enum": ["retained-nginx", "greenfield-direct"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "rate_limit": {
+      "type": "object",
+      "required": ["enabled", "backend_enabled", "namespace", "service_name"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "backend_enabled": { "type": "boolean" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "service_name": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "registry": {
+      "type": "object",
+      "required": ["private_registry", "strict_airgap", "images"],
+      "properties": {
+        "private_registry": { "type": "string", "minLength": 1 },
+        "strict_airgap": { "type": "boolean" },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "source", "target"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 },
+              "target": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "display_name",
+          "kind",
+          "host",
+          "route_path",
+          "permission",
+          "backend",
+          "service"
+        ],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["chat", "embedding"] },
+          "host": { "type": "string", "minLength": 1 },
+          "route_path": { "type": "string", "minLength": 1 },
+          "permission": { "type": "string", "minLength": 1 },
+          "backend": {
+            "type": "string",
+            "enum": ["agentgateway-backend", "kubernetes-service"]
+          },
+          "service": {
+            "type": "object",
+            "required": ["name", "namespace", "ports"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "namespace": { "type": "string", "minLength": 1 },
+              "target_port_name": { "type": "string", "minLength": 1 },
+              "target_port_number": { "type": "integer", "minimum": 1 },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["number"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "number": { "type": "integer", "minimum": 1 }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "consumers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "display_name",
+          "credential_placeholder",
+          "allowed_models"
+        ],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "credential_placeholder": {
+            "type": "string",
+            "enum": ["REPLACE_AT_RUNTIME", "example-only-do-not-use"]
+          },
+          "allowed_models": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "rate_limits": {
+            "type": "object",
+            "required": ["requests_per_minute"],
+            "properties": {
+              "requests_per_minute": { "type": "integer", "minimum": 1 },
+              "tokens_per_minute": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

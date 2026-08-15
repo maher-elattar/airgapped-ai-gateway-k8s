@@ -1,6 +1,31 @@
 repos:
   - repo: local
     hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format --check .
+        language: system
+        pass_filenames: false
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check .
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: mypy src tests
+        language: system
+        pass_filenames: false
+      - id: yamllint
+        name: yamllint
+        entry: yamllint .
+        language: system
+        pass_filenames: false
+      - id: pymarkdown
+        name: pymarkdown
+        entry: pymarkdown --config .pymarkdown.yml scan README.md docs
+        language: system
+        pass_filenames: false
       - id: portfolio-secret-boundary
         name: portfolio secret boundary
         entry: scripts/secret-scan.sh --staged

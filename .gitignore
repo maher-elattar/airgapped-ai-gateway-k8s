@@ -29,12 +29,19 @@ temp/
 .cache/
 
 # Tooling state
+.venv/
+.coverage
+coverage.xml
+htmlcov/
 .terraform/
 *.tfstate
 *.tfstate.*
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+*.egg-info/
+__pycache__/
+*.py[cod]
 node_modules/
 dist/
 build/

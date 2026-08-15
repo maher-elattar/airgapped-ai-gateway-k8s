@@ -4,8 +4,8 @@ The delivered baseline remains agentgateway v1.3.1 with Gateway API v1.5.0 exper
 
 Evidence levels used below:
 
-- Delivered artifact evidence: present in the source archive inventory.
-- Article evidence: described in the local Medium article evidence.
+- Delivered artifact evidence: present in the private evidence inventory.
+- Article evidence: described in the public article.
 - Source workflow evidence: reusable behavior observed in the Python and Markdown source.
 - Official release evidence: linked upstream release or documentation.
 - Not tested: no support claim in this repository.
@@ -24,7 +24,7 @@ Evidence levels used below:
 | Envoy rate-limit service | Delivered as a source-side image snapshot, not copied | Remote rate-limit descriptor evaluation | Baseline dependency pattern; production pinning required | Delivered artifact evidence; source workflow evidence | Mutable image tags and simple deployment topology are not sufficient for larger SLOs. |
 | Redis counter store | Source-side Redis 7 Alpine image archive, not copied | Counter storage for rate-limit service | Baseline dependency pattern; production HA not claimed | Delivered artifact evidence; article evidence | Single Redis deployment may not meet availability or durability requirements. |
 | Kubernetes cluster | Existing cluster; version not captured in public evidence | CRDs, Services, RBAC, NetworkPolicies, Secrets, Gateway API resources | Environmental prerequisite, not version-supported by this repository yet | Source workflow evidence | Cluster version, admission policy, and controller compatibility must be tested in disposable kind before claims. |
-| Helm charts | agentgateway chart packages v1.3.1 in source archive, excluded from Git | Chart rendering/install input | Evidence only until rewritten as clean declarative source | Delivered artifact evidence | Chart archives stay outside Git. Rendered output is inspectable, not permanent source of truth. |
+| Helm charts | agentgateway chart packages v1.3.1 observed in private evidence, excluded from Git | Chart rendering/install input | Evidence only until rewritten as clean declarative source | Delivered artifact evidence | Chart archives stay outside Git. Rendered output is inspectable, not permanent source of truth. |
 
 ## Support rule
 

@@ -1,0 +1,14 @@
+---
+extends: default
+
+rules:
+  document-start: disable
+  line-length:
+    max: 180
+    level: warning
+
+ignore: |
+  .venv/
+  build/
+  dist/
+  htmlcov/

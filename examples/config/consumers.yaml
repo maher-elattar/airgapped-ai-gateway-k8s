@@ -1,0 +1,28 @@
+---
+consumers:
+  - key: internal-chat
+    display_name: Internal Chat Application
+    credential_placeholder: REPLACE_AT_RUNTIME
+    allowed_models:
+      - qwen-chat
+      - gemma-chat
+    rate_limits:
+      requests_per_minute: 120
+      tokens_per_minute: 12000
+
+  - key: rag-indexer
+    display_name: RAG Indexer
+    credential_placeholder: REPLACE_AT_RUNTIME
+    allowed_models:
+      - embedding-index
+    rate_limits:
+      requests_per_minute: 300
+
+  - key: testing-client
+    display_name: Testing Client
+    credential_placeholder: example-only-do-not-use
+    allowed_models:
+      - gemma-chat
+    rate_limits:
+      requests_per_minute: 30
+      tokens_per_minute: 2000

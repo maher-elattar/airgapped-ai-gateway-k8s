@@ -1,0 +1,29 @@
+---
+models:
+  - key: qwen-chat
+    display_name: Qwen Chat
+    kind: chat
+    host: qwen.ai.example.internal
+    route_path: /v1/chat/completions
+    permission: allow_qwen_chat
+    backend: agentgateway-backend
+    service:
+      name: qwen-nim
+      namespace: ai-gateway
+      ports:
+        - name: http
+          number: 8000
+
+  - key: gemma-chat
+    display_name: Gemma Chat
+    kind: chat
+    host: gemma.ai.example.internal
+    route_path: /v1/chat/completions
+    permission: allow_gemma_chat
+    backend: agentgateway-backend
+    service:
+      name: gemma-nim
+      namespace: ai-gateway
+      ports:
+        - name: http
+          number: 8000

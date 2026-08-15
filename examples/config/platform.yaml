@@ -1,0 +1,43 @@
+---
+platform:
+  name: airgap-ai-gateway-reference
+  agentgateway_version: v1.3.1
+  gateway_api_version: v1.5.0-experimental
+  confirmation_token: I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+
+cluster:
+  expected_context: kind-airgap-ai-gateway
+
+gateway:
+  namespace: ai-gateway
+  name: ai-gateway
+  hostname_wildcard: "*.ai.example.internal"
+  reference_grant_mode: same-namespace-only
+  exposure_mode: retained-nginx
+
+rate_limit:
+  enabled: true
+  backend_enabled: true
+  namespace: ai-gateway
+  service_name: envoy-ratelimit
+
+registry:
+  private_registry: registry.example.internal:5000
+  strict_airgap: true
+  images:
+    - name: agentgateway
+      source: cr.agentgateway.dev/agentgateway:v1.3.1
+      target: >-
+        registry.example.internal:5000/agentgateway/agentgateway@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    - name: agentgateway-controller
+      source: cr.agentgateway.dev/controller:v1.3.1
+      target: >-
+        registry.example.internal:5000/agentgateway/controller@sha256:2222222222222222222222222222222222222222222222222222222222222222
+    - name: envoy-ratelimit
+      source: envoyproxy/ratelimit:main
+      target: >-
+        registry.example.internal:5000/envoyproxy/ratelimit@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    - name: redis
+      source: redis:7-alpine
+      target: >-
+        registry.example.internal:5000/library/redis@sha256:4444444444444444444444444444444444444444444444444444444444444444
