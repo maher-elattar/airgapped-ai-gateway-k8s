@@ -18,3 +18,7 @@ Newer component versions, if added, must live in a separate compatibility track 
 Phase 0 initializes the local-only clean repository, source-review documentation, context log, Git hygiene, and secret boundary.
 
 No remote is configured. Do not push or publish until a later phase explicitly approves it.
+
+## Architecture contract
+
+The repository-level architecture contract is defined in [docs/architecture.md](docs/architecture.md). Generated runtime resources are inspected for verification and troubleshooting, but they are never manually maintained as the source of truth.
