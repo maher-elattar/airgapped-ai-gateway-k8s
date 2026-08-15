@@ -1,0 +1,46 @@
+# Local/operator state
+.env
+.env.*
+!.env.example
+*keys*.env
+generated-consumer-keys.env
+kubeconfig
+*.kubeconfig
+*.kubeconfig.yaml
+*.kubeconfig.yml
+
+# Archives and binary delivery artifacts
+*.tar
+*.tar.*
+*.tgz
+*.zip
+*.docx
+*.pdf
+*.7z
+*.rar
+
+# Generated run outputs
+runs/
+run-*/
+generated/
+rendered/
+tmp/
+temp/
+.cache/
+
+# Tooling state
+.terraform/
+*.tfstate
+*.tfstate.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+dist/
+build/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
