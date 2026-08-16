@@ -14,7 +14,7 @@ metadata:
 spec:
   project: airgap-ai-gateway
   source:
-    repoURL: https://github.com/ahmed658/airgap-ai-gateway-platform.git
+    repoURL: https://github.com/ahmed658/airgapped-ai-gateway-k8s.git
     targetRevision: main
     path: gitops/argocd/managed-overlays/production-reference
   destination:

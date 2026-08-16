@@ -40,7 +40,7 @@ def test_argocd_application_points_to_managed_overlay(environment: str) -> None:
     assert len(applications) == 1
     application = applications[0]
     spec = application["spec"]
-    assert spec["source"]["repoURL"] == "https://github.com/ahmed658/airgap-ai-gateway-platform.git"
+    assert spec["source"]["repoURL"] == "https://github.com/ahmed658/airgapped-ai-gateway-k8s.git"
     assert spec["source"]["targetRevision"] == "main"
     assert spec["source"]["path"] == f"gitops/argocd/managed-overlays/{environment}"
     assert spec["destination"] == {
@@ -60,7 +60,7 @@ def test_argocd_project_is_least_privilege_and_secret_free() -> None:
     project = next(item for item in rendered.bootstrap if item["kind"] == "AppProject")
     spec = project["spec"]
 
-    assert spec["sourceRepos"] == ["https://github.com/ahmed658/airgap-ai-gateway-platform.git"]
+    assert spec["sourceRepos"] == ["https://github.com/ahmed658/airgapped-ai-gateway-k8s.git"]
     assert spec["destinations"] == [
         {"namespace": "ai-gateway", "server": "https://kubernetes.default.svc"}
     ]

@@ -57,6 +57,21 @@ jobs:
           chmod +x "${bin_dir}/actionlint"
           echo "${bin_dir}" >> "${GITHUB_PATH}"
 
+      - name: Install kustomize
+        env:
+          KUSTOMIZE_URL: https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz
+          KUSTOMIZE_SHA256: ea375e7372f9aa029129d4b2d16c66b7750b7f1213c4f66f910d981c895818d8
+        run: |
+          set -euo pipefail
+          tools_dir="${RUNNER_TEMP}/ci-tools"
+          bin_dir="${tools_dir}/bin"
+          mkdir -p "${bin_dir}"
+          curl -fsSL "${KUSTOMIZE_URL}" -o "${tools_dir}/kustomize.tar.gz"
+          echo "${KUSTOMIZE_SHA256}  ${tools_dir}/kustomize.tar.gz" | sha256sum -c -
+          tar -xzf "${tools_dir}/kustomize.tar.gz" -C "${bin_dir}" kustomize
+          chmod +x "${bin_dir}/kustomize"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
       - name: Full-history secret scan
         run: |
           set -euo pipefail
@@ -85,15 +100,45 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
-      - name: Trivy Kubernetes config scan
+      # Kubernetes objects are scanned in rendered form. Overlay directories hold
+      # strategic merge patch fragments, which are not complete objects: scanning
+      # them as files reports missing fields that the base already sets.
+      - name: Render Kubernetes objects for misconfiguration scanning
+        run: |
+          set -euo pipefail
+          rendered="${RUNNER_TEMP}/security/rendered"
+          mkdir -p "${rendered}"
+          for environment in kind-demo retained-nginx-edge production-reference; do
+            kustomize build "manifests/baseline-v1.3.1/overlays/${environment}" \
+              > "${rendered}/${environment}.yaml"
+            kustomize build "gitops/argocd/bootstrap/${environment}" \
+              > "${rendered}/gitops-${environment}-bootstrap.yaml"
+            kustomize build "gitops/argocd/managed-overlays/${environment}" \
+              > "${rendered}/gitops-${environment}-managed.yaml"
+          done
+
+      - name: Trivy misconfiguration scan of rendered Kubernetes objects
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: ${{ runner.temp }}/security/rendered
+          format: json
+          output: ${{ runner.temp }}/security/trivy-config-rendered.json
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore.yaml
+
+      - name: Trivy misconfiguration scan of repository build inputs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           scan-type: config
           scan-ref: .
+          skip-dirs: manifests,gitops,build,runs
           format: json
-          output: ${{ runner.temp }}/security/trivy-config.json
+          output: ${{ runner.temp }}/security/trivy-config-sources.json
           exit-code: "1"
           severity: CRITICAL,HIGH
+          trivyignores: .trivyignore.yaml
 
       - name: Workflow scan
         run: |

@@ -1,0 +1,30 @@
+---
+# Accepted misconfiguration findings.
+#
+# Every entry records a finding that Trivy reports correctly but that this
+# platform accepts by design. Each entry names the rule, the exact resource it
+# applies to, and the reason the design is deliberate. Entries are scoped to
+# specific rule identifiers so that a new occurrence of the same class of
+# problem in a different resource still fails the security gate.
+
+misconfigurations:
+  - id: KSV-0109
+    statement: >-
+      The external-secret-contract ConfigMap declares the name of the runtime
+      Secret, the label that Secret must carry, and the JSON shape its values
+      must follow. It holds no credential material. The platform never renders
+      Secret, stringData, or provider credentials from this repository, and the
+      manifest policy checks in scripts/validate_manifests.py fail the build if
+      it ever does. The rule matches on key names containing "secret", which is
+      unavoidable for a resource whose purpose is to describe where the real
+      Secret comes from.
+
+  - id: KSV-0108
+    statement: >-
+      The external-ha-redis Service is an ExternalName pointer to the highly
+      available Redis instance that the rate limit counters depend on. That
+      Redis is owned outside this repository and is reached over the internal
+      network of a disconnected cluster, so the internet exposure the rule
+      guards against does not apply. The alternative, hardcoding the Redis
+      endpoint into the rate limit Deployment, would remove the ownership
+      boundary that the annotation on the Service makes explicit.

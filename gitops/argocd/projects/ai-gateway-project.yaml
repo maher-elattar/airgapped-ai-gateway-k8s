@@ -11,7 +11,7 @@ metadata:
 spec:
   description: GitOps boundary for the air-gapped AI gateway platform.
   sourceRepos:
-    - https://github.com/ahmed658/airgap-ai-gateway-platform.git
+    - https://github.com/ahmed658/airgapped-ai-gateway-k8s.git
   destinations:
     - server: https://kubernetes.default.svc
       namespace: ai-gateway

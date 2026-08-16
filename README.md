@@ -1007,7 +1007,15 @@ documentation claims are the guarantees the repository actually holds.
 | `unit` | Unit tests with a coverage floor and JUnit output |
 | `manifests` | Kustomize rendering, Argo CD GitOps validation, schema validation, image policy, and route policy |
 | `kind-e2e` | The disposable behavioural matrix on a real cluster |
-| `security` | Full-history secret scanning, dependency audit, Trivy scans, and SBOM generation |
+| `security` | Full-history secret scanning, dependency audit, misconfiguration scanning, and SBOM generation |
+
+Misconfiguration scanning runs against the rendered Kubernetes objects rather
+than the overlay sources. An overlay directory holds strategic merge patch
+fragments, which are not complete objects, so scanning them file by file both
+reports fields that the base already sets and misses the object the cluster
+actually receives. Findings the platform accepts by design are recorded in
+`.trivyignore.yaml`, one rule identifier at a time, each with the reason it is
+deliberate.
 
 ### 12.1 Workflow policy as code
 

@@ -89,9 +89,25 @@ The security workflow runs:
 - Gitleaks against the full reachable Git history.
 - The repository secret scanner against the working tree and history.
 - `pip-audit` against the pinned Python requirement files.
-- Trivy filesystem and Kubernetes configuration scans.
+- A Trivy filesystem scan for vulnerable dependencies.
+- A Trivy misconfiguration scan of the rendered Kubernetes objects.
+- A Trivy misconfiguration scan of the remaining repository build inputs.
 - `actionlint` plus the repository workflow policy validator.
 - SPDX JSON SBOM generation.
+
+Kubernetes objects are scanned after Kustomize renders them. Overlay directories
+contain strategic merge patch fragments rather than complete objects, so a
+file-by-file scan reports missing fields that the base already sets, and it never
+sees the object the cluster actually receives. The second scan covers the inputs
+that Kustomize does not produce, such as the mock runtime container image
+definition.
+
+Findings that the platform accepts by design are recorded in
+`.trivyignore.yaml`. Each entry names one rule identifier and states why the
+design is deliberate, so an unexplained suppression is visible in review. Two
+entries exist today: the ConfigMap that declares which runtime Secret to supply
+without containing any credential material, and the `ExternalName` Service that
+points at the operator-owned Redis instance behind the rate limit counters.
 
 No CI cache is used for secrets, bundles, kubeconfig material, registry
 credentials, generated test keys, or runtime artifacts.

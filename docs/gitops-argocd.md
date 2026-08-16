@@ -30,10 +30,19 @@ should manage that as part of their cluster platform baseline.
 ```text
 gitops/argocd/
 ├── applications/              # One Argo CD Application per gateway profile
+│   └── <profile>/             # Application manifest and its Kustomize base
 ├── bootstrap/                 # Kustomize entrypoints applied to the argocd namespace
 ├── managed-overlays/          # Argo CD-facing wrappers around the gateway overlays
 └── projects/                  # AppProject with source, destination, and kind limits
 ```
+
+Each bootstrap entrypoint composes exactly two bases: the shared AppProject and
+the Application for that profile. Both are directories with their own
+`kustomization.yaml` rather than loose file paths, because Kustomize refuses to
+read individual files from outside the directory it is building. That rule
+applies equally to `kubectl apply -k` and to Argo CD's own renderer, so the
+composition works the same way in CI, in a manual bootstrap, and in the
+controller.
 
 The managed overlays wrap the normal platform overlays. They do not fork the
 gateway manifests. Their job is to add GitOps-specific metadata, including prune
@@ -51,7 +60,7 @@ source.
 Every Application points at the `main` branch of the public project repository:
 
 ```text
-https://github.com/ahmed658/airgap-ai-gateway-platform.git
+https://github.com/ahmed658/airgapped-ai-gateway-k8s.git
 ```
 
 In a disconnected environment, mirror that repository into the internal Git
