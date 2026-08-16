@@ -87,7 +87,7 @@ jobs:
           AIRGAP_LAB_RUNS_DIR: ${{ runner.temp }}/kind-runs
         run: python scripts/kind_e2e_lab.py run
 
-      - name: Upload lab evidence
+      - name: Upload redacted lab evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

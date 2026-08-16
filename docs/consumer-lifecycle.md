@@ -20,6 +20,24 @@ A useful consumer record has:
 The credential value is not repository source. Only the contract and the fake
 examples belong here.
 
+## What the CLI owns, and what it does not
+
+Consumer operations are split across two systems, and keeping the boundary clear
+avoids the most common mistake in this area.
+
+The CLI owns the **entitlement record**: the consumer key, display name, allowed
+model list, and rate-limit tier, all of which live in repository source. Every
+consumer command is a `plan` / `apply` pair that edits those files, verifies the
+recorded content hashes before writing, and never contacts Kubernetes.
+
+The environment's secret workflow owns the **credential material** — the key
+value itself. No CLI command creates, prints, or stores one.
+
+So `consumer revoke apply` removes the entitlement from source. It does not
+invalidate a key that is already in circulation. Revoking a compromised
+credential means doing both: remove the entitlement here, and invalidate the
+material in the secret system.
+
 ## Add a consumer
 
 Plan the addition:
@@ -57,7 +75,9 @@ Rotate with overlap:
 
 That keeps the application up and keeps attribution stable across the change.
 
-Plan and record the source-side rotation boundary:
+Steps 1 and 4 happen in the secret system. The CLI records the source-side
+rotation boundary, so the entitlement record and its audit trail move with the
+credential rather than lagging behind it:
 
 ```bash
 airgap-ai-gateway --config examples/config consumer rotate plan \
@@ -83,7 +103,8 @@ Note that deleting a route policy is not a way to remove one consumer's access.
 That would affect every consumer of the model and leave the route unprotected in
 the meantime. Change the consumer's entitlement instead.
 
-To revoke the source-side entitlement record:
+Removing the entitlement record is the source-side half of a revocation. Pair it
+with invalidating the credential in the secret system, as described above:
 
 ```bash
 airgap-ai-gateway --config examples/config consumer revoke plan \

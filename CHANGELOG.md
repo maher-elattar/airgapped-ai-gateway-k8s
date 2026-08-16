@@ -19,5 +19,7 @@ Notable changes to this project.
   the full request matrix.
 - GitHub Actions gates for linting, unit tests, manifest validation, disposable
   kind e2e, security scans, workflow policy, and SBOM generation.
+- Argo CD GitOps delivery layer with AppProject/Application bootstrap, managed
+  Kustomize overlays, static validation, CLI planning, and gated apply.
 - Operator guides for deployment, verification, rollback, model onboarding,
   consumer lifecycle, and troubleshooting.

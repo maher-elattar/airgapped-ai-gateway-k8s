@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../projects/ai-gateway-project.yaml
+  - ../../applications/ai-gateway-retained-nginx-edge.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      gitops.airgap.ai.gateway/bootstrap: retained-nginx-edge

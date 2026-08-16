@@ -109,7 +109,7 @@ jobs:
           output-file: ${{ runner.temp }}/security/sbom.spdx.json
           upload-artifact: false
 
-      - name: Upload security evidence
+      - name: Upload redacted security evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

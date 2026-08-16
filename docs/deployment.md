@@ -34,6 +34,8 @@ The source of truth lives in the repository:
   bases and overlays.
 - [airgap/sources.lock.yaml](../airgap/sources.lock.yaml) pins the dependency and
   image set.
+- [gitops/argocd](../gitops/argocd) holds the Argo CD AppProject, Applications,
+  and managed overlays for continuous reconciliation.
 - [src/airgap_ai_gateway](../src/airgap_ai_gateway) holds the planner, executor,
   verifier, redaction, rollback, and bundle logic.
 
@@ -51,6 +53,34 @@ They are not where platform changes belong.
 
 The retained-edge profile is the conservative migration path: prove the gateway
 internally first, change the edge later.
+
+## GitOps deployment path
+
+Argo CD is available as a reconciliation path after the same source has passed
+the bundle, render, image, policy, and Secret checks. The direct deployment path
+applies the selected Kustomize overlay itself. The GitOps path applies an
+AppProject and one Application, then Argo CD reconciles the selected managed
+overlay from Git.
+
+Validate the GitOps layer:
+
+```bash
+make gitops-validate
+```
+
+Plan the bootstrap:
+
+```bash
+airgap-ai-gateway --config examples/config gitops plan \
+  --environment production-reference \
+  --apply-mode server-side-dry-run \
+  --output-dir runs/plans/gitops-production
+```
+
+The bootstrap plan is a normal state-changing plan. It requires an exact context,
+confirmation token, and pre-change snapshot before `gitops apply` can execute.
+
+Full runbook: [gitops-argocd.md](gitops-argocd.md).
 
 ## Prepare the air-gap dependency set
 

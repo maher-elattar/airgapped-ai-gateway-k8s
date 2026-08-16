@@ -9,14 +9,23 @@ registry names all have to be known before the install starts.
 
 ## The operating model
 
-The workflow has two sides:
+The work is split across two machines because no single machine has both the
+internet access needed to fetch the dependencies and the cluster access needed to
+install them.
 
-- Connected side: resolve, fetch, verify, package, and record the dependency set.
-- Disconnected side: verify the package with no network access, promote images to
-  the internal registry, and prove the rendered manifests only reference promoted
-  names.
+- Connected side: resolve the lock, fetch every artefact from its canonical
+  source, verify each payload against the lock, and package the bundle.
+- Disconnected side: verify the bundle again with no network access, promote
+  images to the internal registry, and prove the rendered manifests reference
+  only promoted names.
 
-![Connected-side to offline-side supply chain](assets/diagrams/rendered/airgap-supply-chain.svg)
+The bundle carries the lock file along with the payload, inventory, and
+checksums, which is what makes the second verification possible without a network
+path. Running the check on both sides is deliberate: the first confirms the
+artefacts were fetched correctly, the second confirms nothing changed while
+crossing the boundary.
+
+![Connected side, air-gap boundary, and disconnected side with a verification step on each side](assets/diagrams/rendered/airgap-supply-chain.svg)
 
 ## Compatibility set
 

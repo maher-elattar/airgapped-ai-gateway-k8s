@@ -5,8 +5,10 @@ AIRGAP_LOCK ?= airgap/sources.lock.yaml
 AIRGAP_COMPAT ?= baseline-v1.3.1
 AIRGAP_DIST ?= dist/airgap-demo
 AIRGAP_REGISTRY ?= registry.example.internal:5000
+GITOPS_ENV ?= production-reference
+GITOPS_RENDER_DIR ?= build/gitops
 
-.PHONY: setup lint test render validate diagrams docs-check kind-test security-scan airgap-demo
+.PHONY: setup lint test render validate gitops-render gitops-validate gitops-kind-smoke diagrams docs-check kind-test security-scan airgap-demo
 
 setup:
 	$(PYTHON) -m pip install -c constraints.txt -r requirements-dev.txt -e .
@@ -16,7 +18,7 @@ lint:
 	ruff check .
 	mypy src tests
 	yamllint .
-	pymarkdown --config .pymarkdown.yml scan README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab
+	pymarkdown --config .pymarkdown.yml scan README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab gitops
 
 test:
 	pytest
@@ -29,11 +31,21 @@ validate:
 	airgap-ai-gateway --config $(CONFIG) verify --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY)
 	$(PYTHON) scripts/validate_manifests.py
 
+gitops-render:
+	airgap-ai-gateway --config $(CONFIG) gitops render --environment $(GITOPS_ENV) --output-dir $(GITOPS_RENDER_DIR)
+
+gitops-validate:
+	airgap-ai-gateway --config $(CONFIG) gitops validate
+	$(PYTHON) scripts/validate_gitops.py
+
+gitops-kind-smoke:
+	airgap-ai-gateway --config $(CONFIG) gitops plan --environment kind-demo --apply-mode server-side-dry-run --output-dir $(GITOPS_RENDER_DIR)/kind-demo-plan
+
 diagrams:
 	$(PYTHON) scripts/verify_assets.py
 
 docs-check:
-	$(PYTHON) scripts/check_links.py README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab
+	$(PYTHON) scripts/check_links.py README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab gitops
 
 kind-test:
 	$(PYTHON) scripts/kind_e2e_lab.py run

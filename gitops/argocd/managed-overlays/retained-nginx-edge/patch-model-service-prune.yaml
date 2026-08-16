@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-nim
+  namespace: ai-gateway
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gemma-nim
+  namespace: ai-gateway
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedding-nim
+  namespace: ai-gateway
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false

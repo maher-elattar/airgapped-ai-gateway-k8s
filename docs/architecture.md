@@ -132,6 +132,8 @@ The repository defines the platform inputs and the validation rules:
 
 - Checked-in source is documentation, schemas, Kustomize manifests, validation
   scripts, and tests.
+- GitOps source is an optional delivery layer that points Argo CD at the same
+  authored Kustomize overlays.
 - Controller-reconciled resources are for health checks and troubleshooting.
 - Persistent behavior changes go into the source inputs that produce runtime
   state.
@@ -139,6 +141,18 @@ The repository defines the platform inputs and the validation rules:
   operational outputs.
 - Runtime credentials and binary air-gap payloads live in environment-specific
   systems, not here.
+
+## GitOps reconciliation boundary
+
+Argo CD can own steady-state reconciliation without changing the architecture.
+It watches a managed overlay, applies the declared gateway resources, and reports
+drift. The platform team still owns the promotion decision: dependencies must be
+in the internal registry, manifests must pass validation, runtime Secrets must
+exist through the environment secret workflow, and the request matrix must pass
+after reconciliation.
+
+The Argo CD Application does not install model runtimes or carry credential
+values. It reconciles the gateway layer around them.
 
 ## Retained NGINX edge versus greenfield direct exposure
 

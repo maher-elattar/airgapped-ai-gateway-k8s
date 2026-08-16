@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../../manifests/baseline-v1.3.1/overlays/retained-nginx-edge
+patches:
+  - path: patch-model-service-prune.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      gitops.airgap.ai.gateway/managed-by: argocd
+      gitops.airgap.ai.gateway/environment: retained-nginx-edge

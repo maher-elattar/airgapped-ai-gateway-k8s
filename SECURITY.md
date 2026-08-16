@@ -56,6 +56,7 @@ that path until a separate compatibility track passes its tests.
 make security-scan
 make test
 make validate
+make gitops-validate
 ```
 
 `make security-scan` blocks key-like tokens, kubeconfig markers, private key
@@ -79,7 +80,7 @@ full commit SHA. Network-heavy jobs set explicit timeouts, and superseded runs
 are cancelled by workflow concurrency.
 
 Generated test credentials are short lived. The disposable lab writes them to the
-job temporary directory and uploads only evidence: JSON summaries,
+job temporary directory and uploads only redacted evidence: JSON summaries,
 JUnit output, Markdown reports, manifest summaries, security reports, and SBOM
 documents.
 
@@ -94,6 +95,10 @@ The security workflow runs:
 
 No CI cache is used for secrets, bundles, kubeconfig material, registry
 credentials, generated test keys, or runtime artifacts.
+
+When Argo CD is used, protect the watched branch and keep the AppProject limited
+to the intended repository, namespace, and resource kinds. Runtime credentials
+remain outside GitOps source and outside uploaded evidence.
 
 ## Dependency and SBOM policy
 

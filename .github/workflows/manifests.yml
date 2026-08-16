@@ -68,6 +68,17 @@ jobs:
       - name: Run semantic manifest policy checks
         run: python scripts/validate_manifests.py --require-kustomize --summary > "${RUNNER_TEMP}/manifests/semantic-summary.yaml"
 
+      - name: Validate Argo CD GitOps source
+        run: |
+          set -euo pipefail
+          python scripts/validate_gitops.py
+          for environment in kind-demo retained-nginx-edge production-reference; do
+            kustomize build "gitops/argocd/bootstrap/${environment}" \
+              > "${RUNNER_TEMP}/manifests/gitops-${environment}-bootstrap.yaml"
+            kustomize build "gitops/argocd/managed-overlays/${environment}" \
+              > "${RUNNER_TEMP}/manifests/gitops-${environment}-managed.yaml"
+          done
+
       - name: Verify rendered image map
         run: |
           set -euo pipefail

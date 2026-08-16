@@ -292,7 +292,7 @@ def execute_plan(
         command_log.write(commands_log_path)
 
     report_ledger = None
-    if plan.command in {"deploy apply", "cutover apply"}:
+    if plan.command in {"deploy apply", "cutover apply", "gitops apply"}:
         report_ledger = ledger_from_resources(
             resources=plan.resources,
             snapshot=snapshot,

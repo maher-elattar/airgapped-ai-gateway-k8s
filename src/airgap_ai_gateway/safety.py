@@ -11,6 +11,7 @@ MUTATING_ACTIONS = frozenset(
         "cutover apply",
         "rollback apply",
         "destroy apply",
+        "gitops apply",
     }
 )
 

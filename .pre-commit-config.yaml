@@ -23,12 +23,17 @@ repos:
         pass_filenames: false
       - id: pymarkdown
         name: pymarkdown
-        entry: pymarkdown --config .pymarkdown.yml scan README.md docs
+        entry: pymarkdown --config .pymarkdown.yml scan README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs gitops
         language: system
         pass_filenames: false
       - id: manifest-validation
         name: manifest validation
         entry: python scripts/validate_manifests.py
+        language: system
+        pass_filenames: false
+      - id: gitops-validation
+        name: gitops validation
+        entry: python scripts/validate_gitops.py
         language: system
         pass_filenames: false
       - id: secret-boundary

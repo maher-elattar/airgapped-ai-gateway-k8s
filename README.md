@@ -1,8 +1,8 @@
 # Air-Gapped AI Gateway Platform
 
-| <img src="docs/assets/logos/kubernetes.svg" alt="Kubernetes logo" width="42"> | <img src="docs/assets/logos/agentgateway.svg" alt="agentgateway logo" width="42"> | <img src="docs/assets/logos/envoy.svg" alt="Envoy logo" width="42"> | <img src="docs/assets/logos/nvidia.svg" alt="NVIDIA logo" width="42"> | <img src="docs/assets/logos/redis.svg" alt="Redis logo" width="42"> | <img src="docs/assets/logos/nginx.svg" alt="NGINX logo" width="42"> | <img src="docs/assets/logos/python.svg" alt="Python logo" width="42"> | <img src="docs/assets/logos/github-actions.svg" alt="GitHub Actions logo" width="42"> |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Kubernetes | agentgateway | Envoy | NVIDIA NIM | Redis | NGINX | Python | GitHub Actions |
+| <img src="docs/assets/logos/kubernetes.svg" alt="Kubernetes logo" width="42"> | <img src="docs/assets/logos/agentgateway.svg" alt="agentgateway logo" width="42"> | <img src="docs/assets/logos/argocd.svg" alt="Argo CD logo" width="42"> | <img src="docs/assets/logos/envoy.svg" alt="Envoy logo" width="42"> | <img src="docs/assets/logos/nvidia.svg" alt="NVIDIA logo" width="42"> | <img src="docs/assets/logos/redis.svg" alt="Redis logo" width="42"> | <img src="docs/assets/logos/nginx.svg" alt="NGINX logo" width="42"> | <img src="docs/assets/logos/python.svg" alt="Python logo" width="42"> | <img src="docs/assets/logos/github-actions.svg" alt="GitHub Actions logo" width="42"> |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Kubernetes | agentgateway | Argo CD | Envoy | NVIDIA NIM | Redis | NGINX | Python | GitHub Actions |
 
 A reference implementation of a governed internal AI API platform for Kubernetes
 clusters that have no internet access. It places a policy-enforcing gateway in
@@ -20,13 +20,15 @@ supply chain with reviewable, reversible change control.
 4. [Supported baseline](#4-supported-baseline)
 5. [Operational sequence](#5-operational-sequence)
 6. [Deployment steps](#6-deployment-steps)
-7. [Verification](#7-verification)
-8. [Platform operations](#8-platform-operations)
-9. [Repository layout](#9-repository-layout)
-10. [Development workflow](#10-development-workflow)
-11. [Security](#11-security)
-12. [Architecture decisions](#12-architecture-decisions)
-13. [References](#13-references)
+7. [GitOps with Argo CD](#7-gitops-with-argo-cd)
+8. [Verification](#8-verification)
+9. [Platform operations](#9-platform-operations)
+10. [Repository layout](#10-repository-layout)
+11. [Development workflow](#11-development-workflow)
+12. [Continuous integration](#12-continuous-integration)
+13. [Security](#13-security)
+14. [Architecture decisions](#14-architecture-decisions)
+15. [References](#15-references)
 
 ---
 
@@ -123,6 +125,7 @@ component owns one concern:
 | --- | --- |
 | **Kubernetes Gateway API** | The routing contract. Successor to Ingress, splitting responsibilities across `GatewayClass` (which controller implements it), `Gateway` (the listener), and `HTTPRoute` (host and path rules) |
 | **agentgateway** | The AI policy layer. Adds custom resources for consumer authentication, per-model authorization, AI backend behaviour, rate-limit policy, and telemetry attributes |
+| **Argo CD** | Optional GitOps reconciliation. Watches the approved branch and converges the cluster to it continuously; treated as an existing cluster service, not installed by this repository |
 | **Envoy** | The proxy technology underneath the gateway data plane that carries model traffic |
 | **NVIDIA NIM** | The model runtime. Serves OpenAI-compatible chat and embedding APIs; owned by the model platform, not by this gateway |
 | **Envoy ratelimit + Redis** | The quota service and its counter store, evaluating rate-limit descriptors emitted by gateway policy |
@@ -262,6 +265,47 @@ fails after those tests passed, the fault is isolated to the edge layer, and the
 first recovery action is to restore the previous edge backend rather than to
 uninstall the gateway.
 
+### 5.1 Command surface
+
+Every operation that changes anything is a `plan` / `apply` pair. Planning is
+offline and produces a reviewable artefact; applying executes only what the
+approved plan contains. No operation mutates state as a side effect of being
+invoked.
+
+| Operation | Plan command | Apply command | What `apply` changes |
+| --- | --- | --- | --- |
+| Gateway install | `deploy plan` | `deploy apply` | Cluster resources |
+| Traffic cutover | `cutover plan` | `cutover apply` | Cluster resources |
+| Recovery | `rollback plan` | `rollback apply` | Cluster resources |
+| Decommission | `destroy plan` | `destroy apply` | Cluster resources |
+| Argo CD bootstrap | `gitops plan` | `gitops apply` | Argo CD AppProject and Application |
+| Model onboarding | `model add plan` | `model add apply` | Repository source files |
+| Consumer add | `consumer add plan` | `consumer add apply` | Repository source files |
+| Consumer rotate | `consumer rotate plan` | `consumer rotate apply` | Repository source files |
+| Consumer revoke | `consumer revoke plan` | `consumer revoke apply` | Repository source files |
+| Image promotion | `registry promote plan` | `registry promote apply` | Internal registry contents |
+
+The distinction in the last column matters more than it may appear. The model
+and consumer commands are **source-side automation**: they generate and modify
+the authored manifests and configuration in the repository, and they never
+contact Kubernetes or create credential material. Their output is a change to
+review and commit, which then reaches a cluster through the ordinary deploy
+path. The deploy, cutover, rollback, destroy, and GitOps bootstrap commands are **cluster-side**
+and carry the full safety gate — expected context, apply mode, confirmation
+token, and pre-change snapshot.
+
+Source-side applies carry a different guarantee. The plan records a content hash
+for every file it intends to write, and `apply` refuses to proceed if any of
+those files changed after the plan was reviewed. Approving a diff and applying a
+different one is therefore not possible.
+
+Two supporting commands complete the surface:
+
+| Command | Purpose |
+| --- | --- |
+| `snapshot create` | Capture the pre-change state of exactly the resources an approved plan names |
+| `verify static` / `verify runtime` | Prove the source offline, or exercise the request matrix against a live gateway |
+
 ---
 
 ## 6. Deployment steps
@@ -292,18 +336,22 @@ ratelimit image, Python wheels, and required tooling.
 
 ![Air-gap dependency graph](docs/assets/diagrams/article/05-airgap-dependency-graph.png)
 
-Every entry is pinned in [airgap/sources.lock.yaml](airgap/sources.lock.yaml)
-with its version, canonical source, destination name, checksum or OCI digest,
-provenance note, license note, and compatibility-set membership.
+Everything allowed into the environment is pinned in
+[airgap/sources.lock.yaml](airgap/sources.lock.yaml). Nothing is fetched,
+transferred, or installed unless it appears there, so the lock is the single file
+to review when asking what this platform will introduce into a cluster. Each
+entry records the version, canonical source, destination name, checksum or OCI
+digest, provenance note, license note, and compatibility set it belongs to.
 
-The workflow is two-sided: the bundle is assembled and checked on the connected
-side, then verified with no network access on the disconnected side, promoted
-into an internal registry, and matched against the rendered manifests.
+The work runs on two machines, because no single machine has both the internet
+access needed to fetch the dependencies and the cluster access needed to install
+them. Steps 1 and 2 run on the connected side, steps 4 to 6 on the disconnected
+side, and step 3 is the transfer between them.
 
-![Connected-side to offline-side supply chain](docs/assets/diagrams/rendered/airgap-supply-chain.svg)
-
-Use descriptor mode for the fast local audit path. Use `--payload-mode fetch` on
-the connected side when exporting real payloads for transfer.
+**Step 1 — Build the bundle (connected side).** Resolve the lock, download each
+artefact from its canonical source, check every payload against the lock, and
+package the result. The bundle carries the payload, an inventory, checksums, and
+the lock file itself.
 
 ```bash
 airgap-ai-gateway bundle build \
@@ -311,15 +359,46 @@ airgap-ai-gateway bundle build \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
   --dist-dir dist/airgap-demo \
-  --payload-mode descriptor
+  --payload-mode fetch
+```
 
+Use `--payload-mode fetch` when exporting real payloads for transfer. Use
+`--payload-mode descriptor` for a fast local audit that writes the inventory and
+checksums without downloading anything — this is what `make airgap-demo` runs.
+
+**Step 2 — Confirm the bundle before it leaves (connected side).**
+
+```bash
 airgap-ai-gateway bundle verify \
   --lock-file airgap/sources.lock.yaml \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
   --bundle-dir dist/airgap-demo/baseline-v1.3.1
+```
 
-airgap-ai-gateway --config examples/config registry promote \
+**Step 3 — Cross the air gap.** Transfer the bundle by whatever controlled route
+the organisation uses: removable media, a transfer station, a scanning gateway.
+Large bundles can be split into parts, each carrying its own checksum. The
+crossing is one-way — once the bundle is inside, there is no network path back to
+correct a mistake.
+
+**Step 4 — Verify again, offline (disconnected side).** The same command runs
+against the bundled lock and makes no network requests. A single changed byte
+fails here. Running the check on both sides is deliberate: step 2 proves the
+artefacts were fetched correctly, step 4 proves nothing changed in transit.
+
+```bash
+airgap-ai-gateway bundle verify \
+  --lock-file airgap/sources.lock.yaml \
+  --compatibility-set baseline-v1.3.1 \
+  --bundle-dir dist/airgap-demo/baseline-v1.3.1
+```
+
+**Step 5 — Promote images into the internal registry.** Promotion is planned and
+applied as a pair, like every other state-changing operation.
+
+```bash
+airgap-ai-gateway --config examples/config registry promote plan \
   --lock-file airgap/sources.lock.yaml \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
@@ -331,9 +410,23 @@ airgap-ai-gateway --config examples/config registry promote apply \
   --commands-log dist/airgap-demo/promotion-commands.log
 ```
 
-Images are promoted to an internal registry reachable by every cluster node.
-Loading images onto individual nodes is not a supported strategy, because the
-first reschedule onto another node will fail to pull.
+Promote to a registry every cluster node can reach. Loading images onto
+individual nodes is not a supported strategy, because the first reschedule onto
+another node will fail to pull.
+
+**Step 6 — Prove the manifests use only promoted images.**
+
+```bash
+airgap-ai-gateway --config examples/config verify \
+  --lock-file airgap/sources.lock.yaml \
+  --compatibility-set baseline-v1.3.1 \
+  --overlay production-reference \
+  --registry registry.example.internal:5000
+```
+
+This rejects public registry references, mutable tags, unprotected routes, and
+rendered Secret data, which closes the loop between what was imported and what
+the cluster will actually run.
 
 Reference: [docs/airgap-bundle.md](docs/airgap-bundle.md).
 
@@ -456,9 +549,111 @@ Reference: [ADR 0003](docs/adr/0003-staged-cutover-and-rollback.md).
 
 ---
 
-## 7. Verification
+## 7. GitOps with Argo CD
 
-### 7.1 Why failures are part of the proof
+GitOps inverts the direction of deployment. Rather than an operator pushing a
+change into a cluster, a controller inside the cluster continuously pulls the
+declared state from Git and converges the cluster towards it. Argo CD is the
+controller used here. The practical consequence is that drift is corrected
+automatically: a resource edited by hand is reverted on the next reconciliation,
+because Git — not the live cluster — is the authority.
+
+This repository supports both paths. The direct CLI path suits a staged rollout
+where an operator wants a gate at each step. The GitOps path suits steady-state
+operation, where the platform should stay aligned with a reviewed branch without
+anyone running a command.
+
+![Argo CD GitOps reconciliation architecture](docs/assets/diagrams/article/21-argocd-gitops-reconciliation.png)
+
+### 7.1 What Argo CD owns
+
+Argo CD owns the same gateway source that the direct deployment path validates:
+Gateway API resources, agentgateway backends and policies, rate-limit resources,
+NetworkPolicies, ServiceAccounts, ConfigMaps, and environment overlays.
+
+It does not own production model Pods, model weights, runtime API key values, or
+the private registry. Those remain separate platform responsibilities.
+
+Two exclusions are enforced rather than merely documented. The AppProject does
+not allow the `Secret` kind at all, so an Application cannot reconcile credential
+material even if a Secret were committed by mistake. And the model Services carry
+`Prune=false`, so an Application lifecycle event cannot delete the model
+workloads the gateway routes to — the same ownership boundary the rollback ledger
+enforces on the direct path, expressed in Argo CD's own terms.
+
+The Application points to a managed overlay wrapper, and that wrapper points back
+to the tested Kustomize overlay.
+
+```text
+gitops/argocd/bootstrap/production-reference
+  -> AppProject + Application in argocd
+  -> gitops/argocd/managed-overlays/production-reference
+  -> manifests/baseline-v1.3.1/overlays/production-reference
+```
+
+### 7.2 Validate the GitOps source
+
+Run the GitOps validation before bootstrapping an Application:
+
+```bash
+make gitops-validate
+```
+
+Render the exact Argo CD bootstrap and managed overlay for review:
+
+```bash
+make gitops-render GITOPS_ENV=production-reference
+```
+
+The validator checks that the AppProject is least privilege, the Application
+points to the expected managed overlay, automated sync is configured as declared,
+no Secret is rendered, model Service contracts have prune protection, and the
+managed overlay still passes the same route, policy, and private-registry checks
+as the normal manifests.
+
+### 7.3 Bootstrap Argo CD with the same safety gate
+
+Plan the bootstrap:
+
+```bash
+airgap-ai-gateway --config examples/config gitops plan \
+  --environment production-reference \
+  --apply-mode server-side-dry-run \
+  --output-dir runs/plans/gitops-production
+```
+
+Capture the existing Argo CD resource state:
+
+```bash
+airgap-ai-gateway snapshot create \
+  --plan-file runs/plans/gitops-production/plan.json \
+  --expected-context kind-airgap-ai-gateway \
+  --output-file runs/snapshots/gitops-production-pre-change.json
+```
+
+Apply only the reviewed bootstrap plan:
+
+```bash
+airgap-ai-gateway --config examples/config gitops apply \
+  --expected-context kind-airgap-ai-gateway \
+  --apply-mode server-side-dry-run \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY \
+  --plan-file runs/plans/gitops-production/plan.json \
+  --snapshot-file runs/snapshots/gitops-production-pre-change.json \
+  --commands-log runs/reports/gitops-production/commands.log
+```
+
+The bootstrap applies the AppProject and one Application. Argo CD then reconciles
+the selected managed overlay from Git. The same runtime verification matrix
+still decides whether the gateway is usable.
+
+Reference: [docs/gitops-argocd.md](docs/gitops-argocd.md).
+
+---
+
+## 8. Verification
+
+### 8.1 Why failures are part of the proof
 
 A gateway is a policy boundary, so readiness probes and successful requests are
 insufficient evidence. The platform must demonstrate that unauthorised requests
@@ -484,7 +679,7 @@ requests succeed.
 The embedding assertion checks vector length rather than status code alone, so a
 `200` proves an actual embedding response instead of any successful HTTP reply.
 
-### 7.2 Resource conditions
+### 8.2 Resource conditions
 
 Runtime verification also polls bounded Kubernetes conditions, because a resource
 existing is not the same as a resource working:
@@ -494,7 +689,7 @@ existing is not the same as a resource working:
 - `AgentgatewayPolicy` — `Accepted=True` and `Attached=True`
 - `Deployment` — observed generation and available replicas match the request
 
-### 7.3 Running the proof
+### 8.3 Running the proof
 
 ```bash
 make lint
@@ -506,14 +701,39 @@ make kind-test
 The lab creates a uniquely named cluster and registry, tears down only what it
 created, and writes JUnit, JSON, and Markdown evidence.
 
+Verification has two modes. `verify static` is the default and runs entirely
+offline: it checks configuration consistency, renders the overlays, and enforces
+the image, tag, route, policy, and Secret rules against the rendered output. It
+requires no cluster.
+
+`verify runtime` exercises the same behavioural matrix against a gateway that is
+already running. It requires the expected cluster context and a gateway URL, and
+it refuses to run without both. Test credentials are supplied on the command
+line and are expected to come from a temporary source rather than from anything
+tracked in the repository:
+
+```bash
+airgap-ai-gateway --config examples/config verify runtime \
+  --expected-context kind-airgap-ai-gateway \
+  --gateway-url https://gateway.example.internal \
+  --credential internal-chat=example-only-do-not-use \
+  --credential rag-indexer=example-only-do-not-use \
+  --credential testing-client=example-only-do-not-use \
+  --credential unknown=example-only-do-not-use
+```
+
+This is what makes the request matrix reusable outside the disposable lab: the
+same assertions can be pointed at a staging or production gateway after a change,
+rather than existing only as a local test.
+
 References: [docs/verification.md](docs/verification.md),
 [docs/kind-e2e-lab.md](docs/kind-e2e-lab.md).
 
 ---
 
-## 8. Platform operations
+## 9. Platform operations
 
-### 8.1 Onboarding a model
+### 9.1 Onboarding a model
 
 Adding a model is a routine platform operation rather than a bespoke migration.
 Each model is identified by a stable model key, which propagates to the route
@@ -566,7 +786,7 @@ airgap-ai-gateway --config examples/config model add apply \
 
 Reference: [docs/model-onboarding.md](docs/model-onboarding.md).
 
-### 8.2 Consumer lifecycle
+### 9.2 Consumer lifecycle
 
 A consumer record represents one calling workload. Its credential value is never
 repository content; it is held in the environment's runtime secret system, and
@@ -622,7 +842,7 @@ airgap-ai-gateway --config examples/config consumer revoke apply \
 
 Reference: [docs/consumer-lifecycle.md](docs/consumer-lifecycle.md).
 
-### 8.3 Troubleshooting
+### 9.3 Troubleshooting
 
 Because each control fails with a distinct signal, the response code identifies
 the responsible layer before any manifest is opened.
@@ -639,17 +859,39 @@ the responsible layer before any manifest is opened.
 | `500` / `502` / `503` | Gateway, Service, or model backend fault | Data-plane health, backend Service endpoints, model readiness |
 | Timeout | Network path, or a slow or unhealthy model | NetworkPolicies, model resource pressure, upstream timeouts |
 
-Kubernetes conditions narrow the remaining cases. `ResolvedRefs=False` means a
-route cannot resolve its backend reference, and no credential change will help
-until it does. `Attached=False` means a policy did not bind to its target, which
-a typo in `targetRef` will produce as a valid object protecting nothing.
-`Programmed=False` points at the controller or the generated data plane.
+A response code is only available once a request completes. When requests fail
+before that point, or when the gateway never becomes ready at all, the Kubernetes
+resource conditions carry the diagnosis instead. Three conditions account for
+most cases, and they are not interchangeable — each names a different owner.
 
-![HTTP and status troubleshooting flow](docs/assets/diagrams/rendered/http-status-troubleshooting-flow.svg)
+`Programmed=False` on the Gateway means the control plane never produced a
+working data plane. Nothing downstream is worth examining yet, because there is
+no proxy serving requests. Investigate the CRDs, the controller's readiness, the
+`GatewayClass`, and the parameters the Gateway references.
+
+`ResolvedRefs=False` on an HTTPRoute means the route cannot resolve its backend
+reference. The route exists and is syntactically valid, but it points at
+something the controller cannot find — usually a Service name, namespace, or port
+that does not match, or a cross-namespace reference without a `ReferenceGrant`.
+Credentials are downstream of this: rotating a key while a route cannot resolve
+its backend changes nothing.
+
+`Attached=False` on an AgentgatewayPolicy means the policy did not bind to its
+target. This is the most consequential of the three, because the object is
+otherwise healthy. A typo in `targetRef` produces a policy the API server accepts
+without complaint and that protects nothing at all. The API server validates the
+shape of the reference; only the controller status reports whether the
+relationship actually exists. A route reporting `Accepted=True` with a policy
+reporting `Attached=False` is an unprotected route.
+
+The practical order is therefore to establish that the Gateway is programmed,
+that each route is accepted and resolved, and that each policy is attached —
+before drawing any conclusion from a response code. A `200` from a route whose
+policy never attached is not a passing test.
 
 Reference: [docs/troubleshooting.md](docs/troubleshooting.md).
 
-### 8.4 Rollback and decommission
+### 9.4 Rollback and decommission
 
 Rollback is driven by a state ledger that records, for every resource, whether it
 was created by the run, updated by the run, or already present beforehand. That
@@ -690,13 +932,14 @@ Reference: [docs/rollback.md](docs/rollback.md).
 
 ---
 
-## 9. Repository layout
+## 10. Repository layout
 
 ```text
 .
 ├── airgap/                         # Source lock and example bundle reports
 ├── docs/                           # Architecture, security, runbooks, ADRs, and assets
 ├── examples/config/                # Example platform, model, consumer, and registry config
+├── gitops/argocd/                  # Argo CD AppProject, Applications, and managed overlays
 ├── lab/                            # Mock OpenAI-compatible services and E2E fixtures
 ├── manifests/baseline-v1.3.1/      # Kustomize source of truth for the tested baseline
 ├── scripts/                        # Validation, lab, asset, and link-check scripts
@@ -710,7 +953,7 @@ archives, wheelhouses, and offline bundle payloads are not.
 
 ---
 
-## 10. Development workflow
+## 11. Development workflow
 
 ```bash
 python -m pip install -c constraints.txt -r requirements-dev.txt -e .
@@ -732,6 +975,7 @@ make test
 make validate
 make render
 make security-scan
+make gitops-validate
 ```
 
 Run documentation checks:
@@ -752,7 +996,41 @@ Contribution expectations: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## 11. Security
+## 12. Continuous integration
+
+The same checks that run locally are enforced in CI, so the guarantees the
+documentation claims are the guarantees the repository actually holds.
+
+| Workflow | Enforces |
+| --- | --- |
+| `lint` | Formatting, linting, typing, YAML, Markdown, shell, and workflow policy |
+| `unit` | Unit tests with a coverage floor and JUnit output |
+| `manifests` | Kustomize rendering, Argo CD GitOps validation, schema validation, image policy, and route policy |
+| `kind-e2e` | The disposable behavioural matrix on a real cluster |
+| `security` | Full-history secret scanning, dependency audit, Trivy scans, and SBOM generation |
+
+### 12.1 Workflow policy as code
+
+CI configuration is itself validated, by `scripts/validate_workflows.py`. A
+workflow that violates the policy fails the `lint` gate rather than being caught
+in review. The policy requires that:
+
+- top-level permissions are exactly `contents: read`;
+- `pull_request_target` is never used;
+- concurrency is declared and cancels superseded runs;
+- every job sets `timeout-minutes` and cannot broaden permissions;
+- every external action is pinned to a full commit SHA, not a tag;
+- cache keys are exact and content-derived, with no `restore-keys` fallback;
+- artefact uploads declare explicit inputs, retention, and failure on missing
+  files.
+
+Pinning actions by SHA and refusing `pull_request_target` are the two rules that
+matter most for a repository handling an offline supply chain: both close paths
+by which an upstream change could alter what CI executes.
+
+---
+
+## 13. Security
 
 Security-sensitive areas include authentication, authorization, Secret handling,
 redaction, image provenance, registry promotion, context verification, apply
@@ -770,7 +1048,7 @@ Reference: [SECURITY.md](SECURITY.md).
 
 ---
 
-## 12. Architecture decisions
+## 14. Architecture decisions
 
 Architecture Decision Records capture the reasoning behind platform boundaries,
 including the alternatives considered and rejected. A future implementation that
@@ -783,10 +1061,11 @@ changing manifests.
 - [ADR 0003: Staged cutover and rollback](docs/adr/0003-staged-cutover-and-rollback.md)
 - [ADR 0004: Air-gap artifacts outside Git](docs/adr/0004-airgap-artifacts-outside-git.md)
 - [ADR 0005: Secret management boundary](docs/adr/0005-secret-management-boundary.md)
+- [ADR 0006: Argo CD GitOps reconciliation](docs/adr/0006-argocd-gitops-reconciliation.md)
 
 ---
 
-## 13. References
+## 15. References
 
 Full implementation write-up:
 
@@ -800,6 +1079,7 @@ Project documentation:
 | [Security model](docs/security-model.md) | Assets, trust boundaries, threats, and controls |
 | [Compatibility](docs/compatibility.md) | Version matrix, evidence, and upgrade risk |
 | [Deployment](docs/deployment.md) | Staged deployment and cutover runbook |
+| [Argo CD GitOps](docs/gitops-argocd.md) | GitOps reconciliation and bootstrap workflow |
 | [Verification](docs/verification.md) | Static and runtime proof procedure |
 | [Rollback](docs/rollback.md) | Recovery and decommission order |
 | [Model onboarding](docs/model-onboarding.md) | Adding a model under default deny |
@@ -807,6 +1087,7 @@ Project documentation:
 | [Troubleshooting](docs/troubleshooting.md) | Signal-driven diagnosis |
 | [Air-gap bundle](docs/airgap-bundle.md) | Offline supply chain workflow |
 | [Disposable lab](docs/kind-e2e-lab.md) | Local behavioural proof environment |
+| [Context log](docs/context-log.md) | Delivered baseline, current status, and open design decisions |
 
 Upstream projects:
 
@@ -814,6 +1095,7 @@ Upstream projects:
 | --- | --- |
 | <img src="docs/assets/logos/agentgateway.svg" alt="agentgateway logo" width="20"> agentgateway | [agentgateway documentation](https://agentgateway.dev/) |
 | <img src="docs/assets/logos/kubernetes.svg" alt="Kubernetes logo" width="20"> Kubernetes Gateway API | [Gateway API project](https://gateway-api.sigs.k8s.io/) |
+| <img src="docs/assets/logos/argocd.svg" alt="Argo CD logo" width="20"> Argo CD | [Argo CD documentation](https://argo-cd.readthedocs.io/) |
 | <img src="docs/assets/logos/envoy.svg" alt="Envoy logo" width="20"> Envoy | [Envoy Proxy](https://www.envoyproxy.io/) |
 | <img src="docs/assets/logos/nvidia.svg" alt="NVIDIA logo" width="20"> NVIDIA NIM | [NVIDIA NIM](https://www.nvidia.com/en-us/ai/) |
 | <img src="docs/assets/logos/redis.svg" alt="Redis logo" width="20"> Redis | [Redis](https://redis.io/) |

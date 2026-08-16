@@ -55,6 +55,7 @@ Out of scope here:
 | Operator workstation to cluster | Human or automation applies source-controlled changes | Explicit context verification and reviewed apply path |
 | Connected side to air-gap side | Artifacts move into disconnected environment | Checksums, inventory, private registry mapping, no secret material in bundle |
 | Runtime secret store to gateway | Credentials become available to policy | External secret integration or Kubernetes Secret with encryption and RBAC |
+| Git to Argo CD | Approved source reconciles into the cluster | Branch protection, CI validation, AppProject limits, no Secret values in Git |
 
 ## Threat actors
 
@@ -112,6 +113,16 @@ NetworkPolicies should restrict:
 - Gateway-to-rate-limit-service traffic.
 - Rate-limit-service-to-Redis traffic.
 - Default east-west access from unrelated namespaces.
+
+### GitOps reconciliation
+
+When Argo CD is used, the AppProject should limit the repository, destination
+namespace, and resource kinds. Automated sync is safe only when the watched
+branch is protected by review and CI, because the merge becomes the deployment
+approval.
+
+Runtime Secrets stay outside the Application source. The GitOps layer may
+declare Secret names and integration contracts, but not credential values.
 
 ### Key rotation
 

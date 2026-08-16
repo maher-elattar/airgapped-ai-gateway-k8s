@@ -31,6 +31,7 @@ Evidence levels used in the table:
 | Redis counter store | Demo Redis pinned through the image map; external HA Redis in production-reference | Counter storage for the rate-limit service | Demo in kind and retained-edge; external HA contract in production-reference | Repository manifests and tests | One Redis Deployment may not meet availability or durability requirements. |
 | Kubernetes cluster | Environment-specific | CRDs, Services, RBAC, NetworkPolicies, Secrets, Gateway API resources | Environmental prerequisite; no version claim from this repository yet | Not tested | Cluster version, admission policy, and controller compatibility should be tested in disposable kind before any claim. |
 | Helm charts | Not vendored | Optional upstream install/render input outside the authored manifests | Not part of the repository source of truth | Not tested | Chart archives stay outside Git. Rendered output is inspectable, not permanent source. |
+| Argo CD | Environment-provided; no version delivered here | AppProject and Application resources from an existing Argo CD installation | GitOps integration pattern, not an Argo CD distribution | Repository GitOps manifests and static validation | Argo CD install, SSO, RBAC, repository credentials, and controller upgrades remain cluster-platform responsibilities. |
 
 ## Support rule
 

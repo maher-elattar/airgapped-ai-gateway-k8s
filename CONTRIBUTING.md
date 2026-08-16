@@ -15,6 +15,7 @@ Run the normal checks:
 make lint
 make test
 make validate
+make gitops-validate
 make security-scan
 ```
 
@@ -32,6 +33,8 @@ make kind-test
   outputs, kubeconfig files, or private environment identifiers.
 - Keep durable Kubernetes behavior in the authored manifests, Kustomize overlays,
   configuration, scripts, and tests.
+- Keep Argo CD Applications pointed at managed overlays that pass the same
+  manifest and image policy checks as the direct deployment path.
 - Do not add a support claim for a new upstream version until the tests for it
   pass.
 - Update the docs alongside any operator-facing behavior change.

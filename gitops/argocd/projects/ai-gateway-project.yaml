@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: airgap-ai-gateway
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: airgap-ai-gateway
+    app.kubernetes.io/component: gitops-project
+    app.kubernetes.io/part-of: airgap-ai-gateway
+    airgap.ai.gateway/baseline: v1.3.1
+spec:
+  description: GitOps boundary for the air-gapped AI gateway platform.
+  sourceRepos:
+    - https://github.com/ahmed658/airgap-ai-gateway-platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: ai-gateway
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: policy
+      kind: PodDisruptionBudget
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: gateway.networking.k8s.io
+      kind: ReferenceGrant
+    - group: agentgateway.dev
+      kind: AgentgatewayBackend
+    - group: agentgateway.dev
+      kind: AgentgatewayParameters
+    - group: agentgateway.dev
+      kind: AgentgatewayPolicy
+  orphanedResources:
+    warn: true

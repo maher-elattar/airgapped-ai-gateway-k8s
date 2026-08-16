@@ -34,6 +34,11 @@ CONFIRMATION = "I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY"
         ["consumer", "revoke", "--help"],
         ["destroy", "plan", "--help"],
         ["destroy", "apply", "--help"],
+        ["gitops", "--help"],
+        ["gitops", "render", "--help"],
+        ["gitops", "validate", "--help"],
+        ["gitops", "plan", "--help"],
+        ["gitops", "apply", "--help"],
     ],
 )
 def test_cli_help_works_for_every_planned_command(args: list[str]) -> None:

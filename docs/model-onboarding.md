@@ -65,8 +65,11 @@ An unprotected route is not valid. A policy with no healthy route behind it is
 not useful. Treat the pair as a single model-facing unit and review them
 together.
 
-The CLI produces the source-change plan for the model contract, route, backend,
-policy, Kustomize resource list, and optional initial consumer grant:
+Writing that pair by hand is where onboarding drifts: a route lands without its
+policy, or a permission field is spelled one way in the policy and another in the
+consumer record. The CLI generates both from the single model key, along with the
+model contract, backend representation, Kustomize resource list, and an optional
+initial consumer grant.
 
 ```bash
 airgap-ai-gateway --config examples/config model add plan \
@@ -83,8 +86,9 @@ airgap-ai-gateway --config examples/config model add plan \
   --output-dir runs/plans/model-falcon-chat
 ```
 
-Review `runs/plans/model-falcon-chat/plan.md` and `plan.json`. Apply only the
-approved source plan:
+The plan is written as `plan.json` for the executor and `plan.md` for review.
+Read the Markdown summary before applying anything; it lists every source file
+the apply will create or modify.
 
 ```bash
 airgap-ai-gateway --config examples/config model add apply \
@@ -92,8 +96,22 @@ airgap-ai-gateway --config examples/config model add apply \
   --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
 ```
 
-This updates repository source files. It does not create runtime credentials and
-it does not contact Kubernetes.
+Two properties of this command are worth being explicit about.
+
+It is source-side only. The apply edits repository files. It does not contact
+Kubernetes, does not create credential material, and does not change anything in
+a running cluster. The generated change reaches a cluster the same way any other
+change does: review, commit, then the ordinary deploy path.
+
+It refuses to apply a plan that no longer matches. The plan records a content
+hash for every file it intends to write, and the apply aborts if any of those
+files changed after the plan was produced. Reviewing one diff and applying a
+different one is therefore not possible, which matters when the review and the
+apply are separated by time or by person.
+
+After applying, the generated route and policy still have to be validated and
+proven like any other change — the automation removes the transcription errors,
+not the verification requirement.
 
 ## Keep default-deny
 

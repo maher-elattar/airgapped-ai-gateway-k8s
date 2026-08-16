@@ -23,6 +23,13 @@ from airgap_ai_gateway.configuration import load_config
 from airgap_ai_gateway.discovery import discover
 from airgap_ai_gateway.errors import AirgapGatewayError
 from airgap_ai_gateway.execution import SubprocessCommandRunner, execute_plan
+from airgap_ai_gateway.gitops import (
+    GITOPS_ENVIRONMENTS,
+    build_gitops_execution_plan,
+    render_gitops,
+    validate_gitops,
+    write_gitops_render,
+)
 from airgap_ai_gateway.ledger import PreChangeSnapshot, StateLedger
 from airgap_ai_gateway.lifecycle import (
     LifecyclePlan,
@@ -281,6 +288,31 @@ def build_parser() -> argparse.ArgumentParser:
         "apply",
         "Apply decommissioning after safety confirmation.",
         "destroy apply",
+    )
+
+    gitops = subcommands.add_parser("gitops", help="Render, validate, or bootstrap Argo CD GitOps.")
+    gitops_sub = gitops.add_subparsers(dest="gitops_command", required=True)
+    gitops_render = gitops_sub.add_parser("render", help="Render Argo CD GitOps source offline.")
+    gitops_render.add_argument("--environment", choices=GITOPS_ENVIRONMENTS, required=True)
+    gitops_render.add_argument("--output-dir", type=Path, default=None)
+    gitops_render.set_defaults(handler=_handle_gitops_render, action="gitops render")
+    gitops_validate = gitops_sub.add_parser("validate", help="Validate Argo CD GitOps source.")
+    gitops_validate.add_argument("--environment", choices=GITOPS_ENVIRONMENTS, action="append")
+    gitops_validate.set_defaults(handler=_handle_gitops_validate, action="gitops validate")
+    gitops_plan = gitops_sub.add_parser("plan", help="Plan Argo CD bootstrap.")
+    gitops_plan.add_argument("--environment", choices=GITOPS_ENVIRONMENTS, required=True)
+    gitops_plan.add_argument(
+        "--apply-mode",
+        choices=("server-side-dry-run", "live"),
+        default="server-side-dry-run",
+    )
+    gitops_plan.add_argument("--output-dir", type=Path, default=None)
+    gitops_plan.set_defaults(handler=_handle_gitops_plan, action="gitops apply")
+    _add_mutating_command(
+        gitops_sub,
+        "apply",
+        "Apply Argo CD bootstrap after safety confirmation.",
+        "gitops apply",
     )
     return parser
 
@@ -727,6 +759,62 @@ def _handle_lifecycle_apply(args: argparse.Namespace) -> int:
         raise AirgapGatewayError(msg)
     report = apply_lifecycle_plan(plan, repo_root=Path.cwd(), config_path=args.config)
     print(to_json(report))
+    return 0
+
+
+def _handle_gitops_render(args: argparse.Namespace) -> int:
+    if args.output_dir is None:
+        print(to_json(render_gitops(args.environment).to_dict()))
+        return 0
+    bootstrap_file, managed_file = write_gitops_render(args.environment, args.output_dir)
+    print(
+        to_json(
+            {
+                "bootstrap": str(bootstrap_file),
+                "environment": args.environment,
+                "managed_overlay": str(managed_file),
+                "status": "rendered",
+            }
+        )
+    )
+    return 0
+
+
+def _handle_gitops_validate(args: argparse.Namespace) -> int:
+    environments = tuple(args.environment or GITOPS_ENVIRONMENTS)
+    failures = [
+        {"environment": environment, "error": error}
+        for environment in environments
+        for error in validate_gitops(environment)
+    ]
+    if failures:
+        print(to_json({"failures": failures, "status": "failed"}))
+        return 2
+    print(to_json({"environments": list(environments), "status": "passed"}))
+    return 0
+
+
+def _handle_gitops_plan(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    plan = build_gitops_execution_plan(
+        config,
+        environment=args.environment,
+        apply_mode=args.apply_mode,
+    )
+    if args.output_dir is None:
+        print(plan.to_json(), end="")
+        return 0
+    json_path, markdown_path = write_plan_files(plan, args.output_dir)
+    print(
+        to_json(
+            {
+                "plan_id": plan.plan_id,
+                "plan_json": str(json_path),
+                "plan_markdown": str(markdown_path),
+                "status": "planned",
+            }
+        )
+    )
     return 0
 
 
