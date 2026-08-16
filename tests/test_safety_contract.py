@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from airgap_ai_gateway.command import CommandResult
+from airgap_ai_gateway.command import CommandResult, describe_intent
 from airgap_ai_gateway.configuration import load_config
 from airgap_ai_gateway.discovery import (
     DiscoveryCandidate,
@@ -63,6 +63,11 @@ def test_safety_gate_allows_non_mutating_and_exact_mutating_command() -> None:
 
     assert mutation_state("deploy apply").startswith("requires approved plan")
     assert mutation_state("deploy plan") == "offline plan"
+
+    intent = describe_intent("render", ("airgap-ai-gateway", "render"), mutating=False)
+    assert intent.label == "render"
+    assert intent.argv == ("airgap-ai-gateway", "render")
+    assert intent.mutating is False
 
 
 def test_safety_gate_rejects_wrong_context_and_confirmation() -> None:

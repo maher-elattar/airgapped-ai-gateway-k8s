@@ -24,8 +24,14 @@ from airgap_ai_gateway.discovery import discover
 from airgap_ai_gateway.errors import AirgapGatewayError
 from airgap_ai_gateway.execution import SubprocessCommandRunner, execute_plan
 from airgap_ai_gateway.ledger import PreChangeSnapshot, StateLedger
-from airgap_ai_gateway.models import ModelKind
-from airgap_ai_gateway.onboarding import render_chat_model_onboarding
+from airgap_ai_gateway.lifecycle import (
+    LifecyclePlan,
+    apply_lifecycle_plan,
+    build_consumer_plan,
+    build_model_add_plan,
+    model_from_request,
+)
+from airgap_ai_gateway.models import ModelConfig
 from airgap_ai_gateway.planning import (
     DEFAULT_OVERLAY,
     ExecutionPlan,
@@ -34,12 +40,13 @@ from airgap_ai_gateway.planning import (
     build_rollback_execution_plan,
     write_plan_files,
 )
-from airgap_ai_gateway.registry import promotion_plan
+from airgap_ai_gateway.registry import apply_promotion_plan, promotion_plan
 from airgap_ai_gateway.renderer import render_manifests, write_rendered_manifests
 from airgap_ai_gateway.reporting import to_json
 from airgap_ai_gateway.rollback import rollback_plan
 from airgap_ai_gateway.safety import ensure_mutation_is_confirmed
-from airgap_ai_gateway.verification import verification_plan
+from airgap_ai_gateway.snapshot import capture_snapshot
+from airgap_ai_gateway.verification import run_runtime_verification, verification_plan
 
 DEFAULT_CONFIG = Path("examples/config")
 
@@ -101,6 +108,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Optional declared metadata hook such as sbom, signature, or malware-scan.",
     )
+    bundle_build.add_argument(
+        "--payload-mode",
+        choices=("descriptor", "fetch"),
+        default="descriptor",
+        help="Use descriptor for fast audit bundles or fetch to export real payloads.",
+    )
     bundle_build.set_defaults(
         handler=_handle_bundle_build,
         action="bundle build",
@@ -123,32 +136,78 @@ def build_parser() -> argparse.ArgumentParser:
         mutating=False,
     )
 
+    snapshot = subcommands.add_parser("snapshot", help="Capture pre-change resource snapshots.")
+    snapshot_sub = snapshot.add_subparsers(dest="snapshot_command", required=True)
+    snapshot_create = snapshot_sub.add_parser(
+        "create", help="Capture resources listed in an approved plan."
+    )
+    snapshot_create.add_argument("--plan-file", type=Path, required=True)
+    snapshot_create.add_argument("--expected-context", required=True)
+    snapshot_create.add_argument("--output-file", type=Path, required=True)
+    snapshot_create.set_defaults(handler=_handle_snapshot_create, action="snapshot create")
+
     registry = subcommands.add_parser("registry", help="Promote images into a private registry.")
     registry_sub = registry.add_subparsers(dest="registry_command", required=True)
-    promote = registry_sub.add_parser(
-        "promote", help="Plan image promotion into the private registry."
+    promote = registry_sub.add_parser("promote", help="Plan or apply private registry promotion.")
+    promote_sub = promote.add_subparsers(dest="promote_command", required=False)
+    promote_plan = promote_sub.add_parser("plan", help="Plan image promotion.")
+    _add_registry_promote_plan_args(promote_plan)
+    promote_plan.set_defaults(
+        handler=_handle_registry_promote,
+        action="registry promote plan",
+        promote_command="plan",
+        mutating=False,
     )
-    _add_bundle_lock_arguments(promote)
-    promote.add_argument(
-        "--tool",
-        choices=("skopeo", "docker"),
-        default=DEFAULT_PROMOTION_TOOL,
-        help="Preferred promotion command family.",
-    )
-    promote.add_argument(
-        "--skip-existing-check",
-        action="store_true",
-        help="Omit destination existence checks from the plan.",
-    )
-    promote.add_argument(
-        "--output-file",
+    promote_apply = promote_sub.add_parser("apply", help="Apply an approved image promotion plan.")
+    promote_apply.add_argument("--plan-file", type=Path, required=True)
+    promote_apply.add_argument("--confirm", required=True)
+    promote_apply.add_argument(
+        "--commands-log",
         type=Path,
         default=None,
-        help="Optional path for the JSON promotion plan.",
+        help="Optional redacted commands log path.",
     )
+    promote_apply.set_defaults(
+        handler=_handle_registry_promote_apply,
+        action="registry promote apply",
+        mutating=True,
+    )
+    _add_registry_promote_plan_args(promote)
     promote.set_defaults(
-        handler=_handle_registry_promote, action="registry promote", mutating=False
+        handler=_handle_registry_promote,
+        action="registry promote plan",
+        promote_command="plan",
+        mutating=False,
     )
+
+    def _verify_command(value: str) -> str:
+        if value not in {"static", "runtime"}:
+            msg = "verify command must be static or runtime"
+            raise argparse.ArgumentTypeError(msg)
+        return value
+
+    verify = subcommands.add_parser("verify", help="Run static or runtime verification.")
+    verify.add_argument("verify_command", nargs="?", type=_verify_command, default="static")
+    verify.add_argument("--overlay", default=DEFAULT_RENDERED_OVERLAY)
+    verify.add_argument("--lock-file", type=Path, default=DEFAULT_LOCK_PATH)
+    verify.add_argument("--compatibility-set", default=DEFAULT_COMPATIBILITY_SET)
+    verify.add_argument("--registry", default=DEFAULT_PRIVATE_REGISTRY)
+    verify.add_argument("--expected-context", default=None)
+    verify.add_argument("--gateway-url", default=None)
+    verify.add_argument(
+        "--credential",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Runtime-only test credential mapping.",
+    )
+    verify.add_argument("--wrong-host", default="wrong.ai.example.internal")
+    verify.add_argument("--low-limit-consumer", default="testing-client")
+    verify.add_argument("--insecure-skip-tls-verify", action="store_true")
+    verify.set_defaults(handler=_handle_verify, action="verify", mutating=False)
+
+    # Remove the old direct verify parser created by earlier scaffold phases.
+    # The command above keeps the old no-subcommand form as static verification.
 
     deploy = subcommands.add_parser("deploy", help="Plan or apply gateway deployment.")
     deploy_sub = deploy.add_subparsers(dest="deploy_command", required=True)
@@ -156,13 +215,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_mutating_command(
         deploy_sub, "apply", "Apply deployment after safety confirmation.", "deploy apply"
     )
-
-    verify = subcommands.add_parser("verify", help="Plan the verification checks.")
-    verify.add_argument("--overlay", default=DEFAULT_RENDERED_OVERLAY)
-    verify.add_argument("--lock-file", type=Path, default=DEFAULT_LOCK_PATH)
-    verify.add_argument("--compatibility-set", default=DEFAULT_COMPATIBILITY_SET)
-    verify.add_argument("--registry", default=DEFAULT_PRIVATE_REGISTRY)
-    verify.set_defaults(handler=_handle_verify, action="verify", mutating=False)
 
     cutover = subcommands.add_parser("cutover", help="Plan or apply traffic cutover.")
     cutover_sub = cutover.add_subparsers(dest="cutover_command", required=True)
@@ -196,18 +248,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     model = subcommands.add_parser("model", help="Model lifecycle commands.")
     model_sub = model.add_subparsers(dest="model_command", required=True)
-    model_add = model_sub.add_parser("add", help="Plan adding a model with default-deny access.")
-    model_add.add_argument("--model-key", default="example-model", help="Model key to plan.")
-    model_add.set_defaults(handler=_handle_model_add, action="model add", mutating=False)
+    model_add = model_sub.add_parser("add", help="Plan or apply adding a model.")
+    model_add_sub = model_add.add_subparsers(dest="model_add_command", required=False)
+    _add_model_add_plan_args(model_add)
+    model_add.set_defaults(handler=_handle_model_add_legacy, action="model add", mutating=False)
+    model_add_plan = model_add_sub.add_parser("plan", help="Plan adding a model.")
+    _add_model_add_plan_args(model_add_plan)
+    model_add_plan.set_defaults(handler=_handle_model_add_plan, action="model add")
+    model_add_apply = model_add_sub.add_parser("apply", help="Apply an approved model add plan.")
+    _add_lifecycle_apply_args(model_add_apply)
+    model_add_apply.set_defaults(handler=_handle_lifecycle_apply, action="model add")
 
     consumer = subcommands.add_parser("consumer", help="Consumer lifecycle commands.")
     consumer_sub = consumer.add_subparsers(dest="consumer_command", required=True)
     for name in ("add", "rotate", "revoke"):
-        item = consumer_sub.add_parser(name, help=f"Plan consumer {name}.")
-        item.add_argument(
-            "--consumer-key", default="example-consumer", help="Consumer key to plan."
-        )
-        item.set_defaults(handler=_handle_plan, action=f"consumer {name}", mutating=False)
+        item = consumer_sub.add_parser(name, help=f"Plan or apply consumer {name}.")
+        item_sub = item.add_subparsers(dest="consumer_lifecycle_command", required=False)
+        _add_consumer_plan_args(item, name)
+        item.set_defaults(handler=_handle_consumer_legacy, action=f"consumer {name}")
+        plan_item = item_sub.add_parser("plan", help=f"Plan consumer {name}.")
+        _add_consumer_plan_args(plan_item, name)
+        plan_item.set_defaults(handler=_handle_consumer_plan, action=f"consumer {name}")
+        apply_item = item_sub.add_parser("apply", help=f"Apply approved consumer {name} plan.")
+        _add_lifecycle_apply_args(apply_item)
+        apply_item.set_defaults(handler=_handle_lifecycle_apply, action=f"consumer {name}")
 
     destroy = subcommands.add_parser("destroy", help="Plan or apply gateway decommissioning.")
     destroy_sub = destroy.add_subparsers(dest="destroy_command", required=True)
@@ -219,6 +283,66 @@ def build_parser() -> argparse.ArgumentParser:
         "destroy apply",
     )
     return parser
+
+
+def _add_registry_promote_plan_args(promote: argparse.ArgumentParser) -> None:
+    _add_bundle_lock_arguments(promote)
+    promote.add_argument(
+        "--tool",
+        choices=("skopeo", "docker"),
+        default=DEFAULT_PROMOTION_TOOL,
+        help="Preferred promotion command family.",
+    )
+    promote.add_argument(
+        "--skip-existing-check",
+        action="store_true",
+        help="Omit destination existence checks from the plan.",
+    )
+    promote.add_argument(
+        "--output-file",
+        type=Path,
+        default=None,
+        help="Optional path for the JSON promotion plan.",
+    )
+
+
+def _add_model_add_plan_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--model-key", default="example-model", help="Model key to plan.")
+    parser.add_argument("--display-name", default=None)
+    parser.add_argument("--kind", choices=("chat", "embedding"), default="chat")
+    parser.add_argument("--host", default=None)
+    parser.add_argument("--route-path", default=None)
+    parser.add_argument("--permission", default=None)
+    parser.add_argument(
+        "--backend",
+        choices=("agentgateway-backend", "kubernetes-service"),
+        default=None,
+    )
+    parser.add_argument("--service-name", default=None)
+    parser.add_argument("--service-namespace", default=None)
+    parser.add_argument("--service-port", type=int, default=8000)
+    parser.add_argument("--service-port-name", default="http")
+    parser.add_argument("--grant-consumer", default=None)
+    parser.add_argument("--output-dir", type=Path, default=None)
+
+
+def _add_consumer_plan_args(parser: argparse.ArgumentParser, command: str) -> None:
+    parser.add_argument("--consumer-key", default="example-consumer", help="Consumer key to plan.")
+    if command == "add":
+        parser.add_argument("--display-name", default=None)
+        parser.add_argument(
+            "--allowed-model",
+            action="append",
+            default=[],
+            help="Allowed model key. Repeat for multiple models.",
+        )
+        parser.add_argument("--requests-per-minute", type=int, default=None)
+    parser.add_argument("--output-dir", type=Path, default=None)
+
+
+def _add_lifecycle_apply_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--plan-file", type=Path, required=True)
+    parser.add_argument("--confirm", required=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -440,6 +564,7 @@ def _handle_bundle_build(args: argparse.Namespace) -> int:
                 private_registry=args.registry,
                 split_size_bytes=args.split_size_bytes,
                 metadata_hooks=tuple(args.metadata_hook),
+                payload_mode=args.payload_mode,
             )
         )
     )
@@ -478,15 +603,56 @@ def _handle_registry_promote(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_snapshot_create(args: argparse.Namespace) -> int:
+    plan = ExecutionPlan.from_file(args.plan_file)
+    report = capture_snapshot(
+        plan=plan,
+        runner=SubprocessCommandRunner(),
+        expected_context=args.expected_context,
+        output_file=args.output_file,
+    )
+    print(to_json(report.to_dict()))
+    return 0
+
+
+def _handle_registry_promote_apply(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    report = apply_promotion_plan(
+        plan_file=args.plan_file,
+        runner=SubprocessCommandRunner(),
+        confirmation=args.confirm,
+        expected_confirmation=config.platform.confirmation_token,
+        commands_log_path=args.commands_log,
+    )
+    print(to_json(report))
+    return 0
+
+
 def _handle_verify(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    report = verification_plan(config)
-    report["rendered_manifest_images"] = verify_rendered_manifests_against_lock(
-        lock_path=args.lock_file,
-        compatibility_set=args.compatibility_set,
-        overlay=args.overlay,
-        private_registry=args.registry,
-    )
+    if args.verify_command == "runtime":
+        _require_apply_argument(args.expected_context, "--expected-context")
+        if not isinstance(args.gateway_url, str) or not args.gateway_url:
+            msg = "runtime verification refused: pass --gateway-url."
+            raise AirgapGatewayError(msg)
+        report = run_runtime_verification(
+            config,
+            runner=SubprocessCommandRunner(),
+            expected_context=args.expected_context,
+            gateway_url=args.gateway_url,
+            credentials=_parse_credentials(args.credential),
+            wrong_host=args.wrong_host,
+            low_limit_consumer=args.low_limit_consumer,
+            verify_tls=not args.insecure_skip_tls_verify,
+        )
+    else:
+        report = verification_plan(config)
+        report["rendered_manifest_images"] = verify_rendered_manifests_against_lock(
+            lock_path=args.lock_file,
+            compatibility_set=args.compatibility_set,
+            overlay=args.overlay,
+            private_registry=args.registry,
+        )
     print(to_json(report))
     return 0
 
@@ -519,13 +685,48 @@ def _handle_rollback_plan(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_model_add(args: argparse.Namespace) -> int:
+def _handle_model_add_legacy(args: argparse.Namespace) -> int:
+    return _handle_model_add_plan(args)
+
+
+def _handle_model_add_plan(args: argparse.Namespace) -> int:
+    plan = build_model_add_plan(
+        config_path=args.config,
+        model=_model_from_args(args),
+        grant_consumer_key=args.grant_consumer,
+    )
+    _emit_lifecycle_plan(plan, args.output_dir)
+    return 0
+
+
+def _handle_consumer_legacy(args: argparse.Namespace) -> int:
+    return _handle_consumer_plan(args)
+
+
+def _handle_consumer_plan(args: argparse.Namespace) -> int:
+    plan = build_consumer_plan(
+        config_path=args.config,
+        action=args.action,
+        consumer_key=args.consumer_key,
+        display_name=getattr(args, "display_name", None),
+        allowed_models=tuple(getattr(args, "allowed_model", ())),
+        requests_per_minute=getattr(args, "requests_per_minute", None),
+    )
+    _emit_lifecycle_plan(plan, getattr(args, "output_dir", None))
+    return 0
+
+
+def _handle_lifecycle_apply(args: argparse.Namespace) -> int:
     config = load_config(args.config)
-    model = next((item for item in config.models if item.key == args.model_key), None)
-    if model is None or model.kind is not ModelKind.CHAT:
-        print(to_json(build_plan(config, args.action, mutating=False)))
-        return 0
-    print(render_chat_model_onboarding(model, namespace=config.platform.gateway.namespace), end="")
+    if args.confirm != config.platform.confirmation_token:
+        msg = f"{args.action} apply refused: confirmation token does not match configuration."
+        raise AirgapGatewayError(msg)
+    plan = LifecyclePlan.from_file(args.plan_file)
+    if plan.action != args.action:
+        msg = f"{args.action} apply refused: plan action is {plan.action!r}."
+        raise AirgapGatewayError(msg)
+    report = apply_lifecycle_plan(plan, repo_root=Path.cwd(), config_path=args.config)
+    print(to_json(report))
     return 0
 
 
@@ -533,6 +734,61 @@ def _require_apply_argument(value: object, flag: str) -> None:
     if not isinstance(value, str) or not value:
         msg = f"apply command refused: pass {flag}."
         raise AirgapGatewayError(msg)
+
+
+def _emit_lifecycle_plan(plan: LifecyclePlan, output_dir: Path | None) -> None:
+    if output_dir is None:
+        print(plan.to_json(), end="")
+        return
+    json_path, markdown_path = plan.write(output_dir)
+    print(
+        to_json(
+            {
+                "plan_id": plan.plan_id,
+                "plan_json": str(json_path),
+                "plan_markdown": str(markdown_path),
+                "status": "planned",
+            }
+        )
+    )
+
+
+def _model_from_args(args: argparse.Namespace) -> ModelConfig:
+    key = args.model_key
+    kind = args.kind
+    backend = args.backend
+    if backend is None:
+        backend = "agentgateway-backend" if kind == "chat" else "kubernetes-service"
+    route_path = args.route_path
+    if route_path is None:
+        route_path = "/v1/chat/completions" if kind == "chat" else "/v1/embeddings"
+    return model_from_request(
+        key=key,
+        display_name=args.display_name or key.replace("-", " ").title(),
+        kind=kind,
+        host=args.host or f"{key}.ai.example.internal",
+        route_path=route_path,
+        permission=args.permission or f"model:{key}:invoke",
+        backend=backend,
+        service_name=args.service_name or f"{key}-service",
+        service_namespace=args.service_namespace or "ai-gateway",
+        service_port=args.service_port,
+        service_port_name=args.service_port_name,
+    )
+
+
+def _parse_credentials(raw_values: Sequence[str]) -> dict[str, str]:
+    credentials: dict[str, str] = {}
+    for raw in raw_values:
+        if "=" not in raw:
+            msg = "credential values must use KEY=VALUE"
+            raise AirgapGatewayError(msg)
+        key, value = raw.split("=", 1)
+        if not key or not value:
+            msg = "credential values must use non-empty KEY=VALUE pairs"
+            raise AirgapGatewayError(msg)
+        credentials[key] = value
+    return credentials
 
 
 if __name__ == "__main__":

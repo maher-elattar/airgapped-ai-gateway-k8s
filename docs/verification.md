@@ -47,6 +47,20 @@ python scripts/kind_e2e_lab.py run --with-nginx
 The lab writes JUnit, JSON, and Markdown evidence into ignored run directories.
 Example outputs are in [lab/samples](../lab/samples).
 
+When a gateway endpoint is already available, the CLI can run the same runtime
+matrix against that endpoint. Credentials are supplied at runtime and should come
+from a temporary test source, not from repository files:
+
+```bash
+airgap-ai-gateway --config examples/config verify runtime \
+  --expected-context kind-airgap-ai-gateway \
+  --gateway-url https://gateway.example.internal \
+  --credential internal-chat=example-only-do-not-use \
+  --credential rag-indexer=example-only-do-not-use \
+  --credential testing-client=example-only-do-not-use \
+  --credential unknown=example-only-do-not-use
+```
+
 ## Behavioral matrix
 
 | Signal | Expected result | What it proves |

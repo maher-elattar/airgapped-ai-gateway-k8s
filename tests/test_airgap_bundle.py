@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -188,3 +189,116 @@ def test_cli_bundle_build_and_verify(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert build_output["status"] == "built"
     assert verify_code == 0
     assert verify_output["status"] == "verified"
+
+
+def test_bundle_fetch_mode_copies_local_payload_and_verifies_offline(tmp_path: Path) -> None:
+    source = tmp_path / "tool.txt"
+    source.write_text("tiny fixture\n", encoding="utf-8")
+    sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    lock_path = _write_test_lock(
+        tmp_path,
+        artifact_type="tool-source",
+        canonical_source=f"file://{source}",
+        destination_name="tools/tiny-fixture.txt",
+        sha256=sha256,
+    )
+
+    report = build_bundle(
+        lock_path=lock_path,
+        compatibility_set="test-set",
+        output_dir=tmp_path / "dist",
+        payload_mode="fetch",
+    )
+    bundle_dir = tmp_path / "dist" / "test-set"
+    inventory = json.loads((bundle_dir / "inventory.json").read_text(encoding="utf-8"))
+    payload = bundle_dir / inventory["artifacts"][0]["path"]
+
+    assert report["payloadMode"] == "fetch"
+    assert payload.read_text(encoding="utf-8") == "tiny fixture\n"
+    assert (
+        verify_bundle(
+            bundle_dir=bundle_dir,
+            lock_path=lock_path,
+            compatibility_set="test-set",
+        )["status"]
+        == "verified"
+    )
+
+
+def test_bundle_fetch_mode_rejects_image_payload_without_oci_tooling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock_path = _write_test_lock(
+        tmp_path,
+        artifact_type="oci-image",
+        canonical_source=(
+            "docker.io/library/busybox@sha256:"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ),
+        destination_name=(
+            "registry.example.internal:5000/library/busybox@sha256:"
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ),
+        oci_digest="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    monkeypatch.setattr("airgap_ai_gateway.airgap_bundle.shutil.which", lambda _name: None)
+
+    with pytest.raises(BundleError, match="requires skopeo or docker"):
+        build_bundle(
+            lock_path=lock_path,
+            compatibility_set="test-set",
+            output_dir=tmp_path / "dist",
+            payload_mode="fetch",
+        )
+
+
+def test_bundle_build_rejects_unknown_payload_mode(tmp_path: Path) -> None:
+    with pytest.raises(BundleError, match="unsupported payload mode"):
+        build_bundle(
+            lock_path=LOCK,
+            output_dir=tmp_path,
+            payload_mode="unknown",
+        )
+
+
+def _write_test_lock(
+    tmp_path: Path,
+    *,
+    artifact_type: str,
+    canonical_source: str,
+    destination_name: str,
+    sha256: str | None = None,
+    oci_digest: str | None = None,
+) -> Path:
+    entry: dict[str, object] = {
+        "artifactType": artifact_type,
+        "canonicalSource": canonical_source,
+        "compatibilitySet": "test-set",
+        "destinationName": destination_name,
+        "license": "Test fixture",
+        "name": "tiny-fixture",
+        "provenance": "local test fixture",
+        "version": "0.0.1",
+    }
+    if sha256 is not None:
+        entry["sha256"] = sha256
+    if oci_digest is not None:
+        entry["ociDigest"] = oci_digest
+    lock_path = tmp_path / "sources.lock.yaml"
+    lock_path.write_text(
+        yaml.safe_dump(
+            {
+                "apiVersion": "airgap.ai.gateway/v1alpha1",
+                "kind": "AirgapSourceLock",
+                "metadata": {"name": "test-lock"},
+                "spec": {
+                    "compatibilitySets": [{"name": "test-set"}],
+                    "entries": [entry],
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return lock_path

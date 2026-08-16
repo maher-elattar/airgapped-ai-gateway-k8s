@@ -40,7 +40,23 @@ incompatibility during the maintenance window instead of before it.
 
 ## Connected-side build
 
-Dependency resolution happens on the connected side:
+Dependency resolution happens on the connected side. The CLI supports two build
+modes:
+
+- `descriptor`: fast audit mode for CI and local demonstrations. It writes the
+  locked inventory, checksums, metadata hooks, and transfer structure without
+  pulling public artifacts.
+- `fetch`: connected-side export mode. It downloads file artifacts, copies OCI
+  images with `skopeo` when available, and falls back to Docker image save where
+  necessary.
+
+The local demonstration intentionally uses descriptor mode:
+
+```bash
+make airgap-demo
+```
+
+For a real transfer bundle, use fetch mode on the connected side:
 
 1. Validate the source lock.
 2. Fetch every artifact from its canonical source.
@@ -56,6 +72,7 @@ airgap-ai-gateway bundle build \
   --lock-file airgap/sources.lock.yaml \
   --compatibility-set baseline-v1.3.1 \
   --dist-dir dist/airgap-bundles \
+  --payload-mode fetch \
   --metadata-hook sbom \
   --metadata-hook signature
 ```
@@ -102,6 +119,15 @@ airgap-ai-gateway registry promote \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
   --output-file dist/airgap-bundles/promotion-plan.json
+```
+
+Apply the approved promotion plan from the disconnected side:
+
+```bash
+airgap-ai-gateway --config examples/config registry promote apply \
+  --plan-file dist/airgap-bundles/promotion-plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY \
+  --commands-log dist/airgap-bundles/promotion-commands.log
 ```
 
 For multi-node clusters, use an internal registry every node can reach. Loading

@@ -36,6 +36,38 @@ make kind-test
   pass.
 - Update the docs alongside any operator-facing behavior change.
 
+## CI quality gates
+
+Every change is expected to pass the same gates that protect the published
+branch:
+
+- `lint / static-analysis` for Ruff, format checks, typing, YAML, Markdown,
+  shell, and workflow policy validation.
+- `unit / pytest` for unit tests, coverage, and JUnit output.
+- `manifests / manifest-validation` for Kustomize rendering, schema validation,
+  image-policy checks, and route-policy checks.
+- `kind-e2e / disposable-gateway-lab` for the disposable behavioral matrix when
+  gateway, manifest, bundle, or lab code changes.
+- `security / security-gates` for full-history secret scanning, dependency
+  audit, Trivy scans, workflow scanning, and SBOM generation.
+
+The e2e job is intentionally heavier than the static gates. It should run on
+main and on pull requests that change gateway behavior, manifests, tests, or lab
+fixtures.
+
+## Branch protection recommendation
+
+Protect `main` before using this repository as a published reference:
+
+- Require at least one approving review before merge.
+- Require the CI status checks listed above.
+- Block force pushes and branch deletion.
+- Require branches to be up to date before merge where practical.
+- Require signed commits, verified provenance, or an equivalent organization
+  policy when available.
+- Use Dependabot or Renovate for dependency and GitHub Actions updates, and let
+  compatibility tests prove that an update is safe before merging it.
+
 ## Documentation boundary
 
 The docs should read as standalone documentation for the project. Leave out local

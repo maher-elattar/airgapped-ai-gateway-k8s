@@ -119,6 +119,15 @@ Apply needs the same safety inputs every time:
 - Pre-change snapshot JSON.
 - Optional redacted command log path.
 
+Capture the snapshot from the approved plan:
+
+```bash
+airgap-ai-gateway snapshot create \
+  --plan-file runs/plans/deploy/plan.json \
+  --expected-context kind-airgap-ai-gateway \
+  --output-file runs/snapshots/pre-change.json
+```
+
 ```bash
 airgap-ai-gateway --config examples/config deploy apply \
   --expected-context kind-airgap-ai-gateway \

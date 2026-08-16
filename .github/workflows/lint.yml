@@ -1,0 +1,57 @@
+name: lint
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-analysis:
+    name: static-analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Install Python tooling
+        run: python -m pip install --disable-pip-version-check -c constraints.txt -r requirements-dev.txt -e .
+
+      - name: Install ShellCheck
+        env:
+          SHELLCHECK_URL: https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          set -euo pipefail
+          tools_dir="${RUNNER_TEMP}/ci-tools"
+          bin_dir="${tools_dir}/bin"
+          mkdir -p "${bin_dir}"
+          curl -fsSL "${SHELLCHECK_URL}" -o "${tools_dir}/shellcheck.tar.xz"
+          echo "${SHELLCHECK_SHA256}  ${tools_dir}/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "${tools_dir}/shellcheck.tar.xz" -C "${tools_dir}"
+          cp "${tools_dir}/shellcheck-v0.11.0/shellcheck" "${bin_dir}/shellcheck"
+          chmod +x "${bin_dir}/shellcheck"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Run lint suite
+        run: make lint
+
+      - name: ShellCheck retained shell scripts
+        run: shellcheck scripts/*.sh
+
+      - name: Validate workflow policy
+        run: python scripts/validate_workflows.py

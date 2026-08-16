@@ -40,9 +40,11 @@ kind-test:
 
 security-scan:
 	scripts/secret-scan.sh --all
+	$(PYTHON) scripts/validate_workflows.py
+	$(PYTHON) scripts/pre_publication_scan.py --working-tree --history --max-bytes 5242880
 
 airgap-demo:
-	airgap-ai-gateway bundle build --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY) --dist-dir $(AIRGAP_DIST) --metadata-hook sbom --metadata-hook signature
+	airgap-ai-gateway bundle build --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY) --dist-dir $(AIRGAP_DIST) --payload-mode descriptor --metadata-hook sbom --metadata-hook signature
 	airgap-ai-gateway bundle verify --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY) --bundle-dir $(AIRGAP_DIST)/$(AIRGAP_COMPAT)
 	airgap-ai-gateway --config $(CONFIG) registry promote --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY) --output-file $(AIRGAP_DIST)/promotion-plan.json
 	airgap-ai-gateway --config $(CONFIG) verify --lock-file $(AIRGAP_LOCK) --compatibility-set $(AIRGAP_COMPAT) --registry $(AIRGAP_REGISTRY)

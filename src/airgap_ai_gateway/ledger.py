@@ -198,6 +198,14 @@ class PreChangeSnapshot:
             "status": self.status,
         }
 
+    def write(self, path: Path) -> None:
+        """Write the snapshot to JSON."""
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(self.to_dict(), handle, indent=2, sort_keys=True)
+            handle.write("\n")
+
 
 @dataclass(frozen=True, slots=True)
 class StateLedger:

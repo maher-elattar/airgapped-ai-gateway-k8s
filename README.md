@@ -302,12 +302,16 @@ into an internal registry, and matched against the rendered manifests.
 
 ![Connected-side to offline-side supply chain](docs/assets/diagrams/rendered/airgap-supply-chain.svg)
 
+Use descriptor mode for the fast local audit path. Use `--payload-mode fetch` on
+the connected side when exporting real payloads for transfer.
+
 ```bash
 airgap-ai-gateway bundle build \
   --lock-file airgap/sources.lock.yaml \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
-  --dist-dir dist/airgap-demo
+  --dist-dir dist/airgap-demo \
+  --payload-mode descriptor
 
 airgap-ai-gateway bundle verify \
   --lock-file airgap/sources.lock.yaml \
@@ -320,6 +324,11 @@ airgap-ai-gateway --config examples/config registry promote \
   --compatibility-set baseline-v1.3.1 \
   --registry registry.example.internal:5000 \
   --output-file dist/airgap-demo/promotion-plan.json
+
+airgap-ai-gateway --config examples/config registry promote apply \
+  --plan-file dist/airgap-demo/promotion-plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY \
+  --commands-log dist/airgap-demo/promotion-commands.log
 ```
 
 Images are promoted to an internal registry reachable by every cluster node.
@@ -387,6 +396,11 @@ apply mode matching the reviewed plan, a confirmation token, the approved plan
 file, and a saved pre-change snapshot. A context mismatch fails closed.
 
 ```bash
+airgap-ai-gateway snapshot create \
+  --plan-file runs/plans/deploy/plan.json \
+  --expected-context kind-airgap-ai-gateway \
+  --output-file runs/snapshots/pre-change.json
+
 airgap-ai-gateway --config examples/config deploy apply \
   --expected-context kind-airgap-ai-gateway \
   --apply-mode server-side-dry-run \
@@ -405,6 +419,16 @@ is involved, which removes DNS, TLS, external load balancers, and legacy ingress
 behaviour from the diagnosis.
 
 ![Direct internal test path](docs/assets/diagrams/article/11-direct-internal-test-path.png)
+
+```bash
+airgap-ai-gateway --config examples/config verify runtime \
+  --expected-context kind-airgap-ai-gateway \
+  --gateway-url https://gateway.example.internal \
+  --credential internal-chat=example-only-do-not-use \
+  --credential rag-indexer=example-only-do-not-use \
+  --credential testing-client=example-only-do-not-use \
+  --credential unknown=example-only-do-not-use
+```
 
 ### 6.8 Cut over the edge
 
@@ -522,7 +546,22 @@ intended route, or that entitlement was applied more broadly than intended.
 Neither condition should be resolved by granting access more widely.
 
 ```bash
-airgap-ai-gateway --config examples/config model add --model-key qwen-chat
+airgap-ai-gateway --config examples/config model add plan \
+  --model-key falcon-chat \
+  --display-name "Falcon Chat" \
+  --kind chat \
+  --host falcon-chat.ai.example.internal \
+  --route-path /v1/falcon/chat/completions \
+  --permission model:falcon-chat:invoke \
+  --service-name falcon-chat-nim \
+  --service-namespace ai-gateway \
+  --service-port 8000 \
+  --grant-consumer internal-chat \
+  --output-dir runs/plans/model-falcon-chat
+
+airgap-ai-gateway --config examples/config model add apply \
+  --plan-file runs/plans/model-falcon-chat/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
 ```
 
 Reference: [docs/model-onboarding.md](docs/model-onboarding.md).
@@ -552,9 +591,33 @@ because it would affect every consumer of that model and leave the route
 unprotected in the interim. The consumer's entitlement is changed instead.
 
 ```bash
-airgap-ai-gateway --config examples/config consumer add --consumer-key search-app
-airgap-ai-gateway --config examples/config consumer rotate --consumer-key search-app
-airgap-ai-gateway --config examples/config consumer revoke --consumer-key search-app
+airgap-ai-gateway --config examples/config consumer add plan \
+  --consumer-key search-app \
+  --display-name "Search App" \
+  --allowed-model qwen-chat \
+  --allowed-model gemma-chat \
+  --requests-per-minute 60 \
+  --output-dir runs/plans/consumer-search-app
+
+airgap-ai-gateway --config examples/config consumer add apply \
+  --plan-file runs/plans/consumer-search-app/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+
+airgap-ai-gateway --config examples/config consumer rotate plan \
+  --consumer-key search-app \
+  --output-dir runs/plans/consumer-search-app-rotate
+
+airgap-ai-gateway --config examples/config consumer rotate apply \
+  --plan-file runs/plans/consumer-search-app-rotate/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+
+airgap-ai-gateway --config examples/config consumer revoke plan \
+  --consumer-key search-app \
+  --output-dir runs/plans/consumer-search-app-revoke
+
+airgap-ai-gateway --config examples/config consumer revoke apply \
+  --plan-file runs/plans/consumer-search-app-revoke/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
 ```
 
 Reference: [docs/consumer-lifecycle.md](docs/consumer-lifecycle.md).

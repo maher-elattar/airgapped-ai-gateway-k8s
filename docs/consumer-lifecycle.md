@@ -25,14 +25,26 @@ examples belong here.
 Plan the addition:
 
 ```bash
-airgap-ai-gateway --config examples/config consumer add \
-  --consumer-key internal-chat
+airgap-ai-gateway --config examples/config consumer add plan \
+  --consumer-key search-app \
+  --display-name "Search App" \
+  --allowed-model qwen-chat \
+  --allowed-model gemma-chat \
+  --requests-per-minute 60 \
+  --output-dir runs/plans/consumer-search-app
 ```
 
-Then update the configuration and the runtime secret material through the
-approved secret workflow for that environment. Start with the smallest model list
-the workload actually needs; widening it later is easy, and narrowing it after
-something depends on it is not.
+Apply the approved source plan:
+
+```bash
+airgap-ai-gateway --config examples/config consumer add apply \
+  --plan-file runs/plans/consumer-search-app/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+```
+
+Then add the runtime credential material through the environment's secret
+workflow. Start with the smallest model list the workload actually needs;
+widening it later is easy, and narrowing it after something depends on it is not.
 
 ## Rotate a key
 
@@ -44,6 +56,18 @@ Rotate with overlap:
 4. Remove or disable the old credential.
 
 That keeps the application up and keeps attribution stable across the change.
+
+Plan and record the source-side rotation boundary:
+
+```bash
+airgap-ai-gateway --config examples/config consumer rotate plan \
+  --consumer-key search-app \
+  --output-dir runs/plans/consumer-search-app-rotate
+
+airgap-ai-gateway --config examples/config consumer rotate apply \
+  --plan-file runs/plans/consumer-search-app-rotate/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+```
 
 ## Disable versus revoke
 
@@ -58,6 +82,18 @@ when a key is exposed, or when you merely suspect it is.
 Note that deleting a route policy is not a way to remove one consumer's access.
 That would affect every consumer of the model and leave the route unprotected in
 the meantime. Change the consumer's entitlement instead.
+
+To revoke the source-side entitlement record:
+
+```bash
+airgap-ai-gateway --config examples/config consumer revoke plan \
+  --consumer-key search-app \
+  --output-dir runs/plans/consumer-search-app-revoke
+
+airgap-ai-gateway --config examples/config consumer revoke apply \
+  --plan-file runs/plans/consumer-search-app-revoke/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+```
 
 ## Browser rule
 

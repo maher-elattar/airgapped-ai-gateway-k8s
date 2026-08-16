@@ -65,6 +65,36 @@ An unprotected route is not valid. A policy with no healthy route behind it is
 not useful. Treat the pair as a single model-facing unit and review them
 together.
 
+The CLI produces the source-change plan for the model contract, route, backend,
+policy, Kustomize resource list, and optional initial consumer grant:
+
+```bash
+airgap-ai-gateway --config examples/config model add plan \
+  --model-key falcon-chat \
+  --display-name "Falcon Chat" \
+  --kind chat \
+  --host falcon-chat.ai.example.internal \
+  --route-path /v1/falcon/chat/completions \
+  --permission model:falcon-chat:invoke \
+  --service-name falcon-chat-nim \
+  --service-namespace ai-gateway \
+  --service-port 8000 \
+  --grant-consumer internal-chat \
+  --output-dir runs/plans/model-falcon-chat
+```
+
+Review `runs/plans/model-falcon-chat/plan.md` and `plan.json`. Apply only the
+approved source plan:
+
+```bash
+airgap-ai-gateway --config examples/config model add apply \
+  --plan-file runs/plans/model-falcon-chat/plan.json \
+  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY
+```
+
+This updates repository source files. It does not create runtime credentials and
+it does not contact Kubernetes.
+
 ## Keep default-deny
 
 A new model grants nothing to existing consumers. The flow is:

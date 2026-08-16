@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
+from urllib import request as url_request
 
 from airgap_ai_gateway.errors import BundleError
 from airgap_ai_gateway.manifest import OVERLAYS, build_overlay, validate_documents
@@ -20,6 +23,7 @@ DEFAULT_COMPATIBILITY_SET = "baseline-v1.3.1"
 DEFAULT_PRIVATE_REGISTRY = "registry.example.internal:5000"
 DEFAULT_PROMOTION_TOOL = "skopeo"
 DEFAULT_RENDERED_OVERLAY = "production-reference"
+PAYLOAD_MODES = frozenset({"descriptor", "fetch"})
 
 IMAGE_ARTIFACT_TYPES = frozenset({"oci-image"})
 VALID_ARTIFACT_TYPES = frozenset(
@@ -206,9 +210,13 @@ def build_bundle(
     private_registry: str = DEFAULT_PRIVATE_REGISTRY,
     split_size_bytes: int | None = None,
     metadata_hooks: Sequence[str] = (),
+    payload_mode: str = "descriptor",
 ) -> JsonDict:
     """Build deterministic connected-side bundle audit artifacts."""
 
+    if payload_mode not in PAYLOAD_MODES:
+        msg = f"unsupported payload mode {payload_mode}; expected descriptor or fetch"
+        raise BundleError(msg)
     lock = load_source_lock(lock_path)
     validate_source_lock(
         lock,
@@ -223,15 +231,19 @@ def build_bundle(
     entries = lock.entries_for(compatibility_set)
     artifacts: list[JsonDict] = []
     for entry in entries:
-        relative_path = Path("payloads") / f"{_safe_file_name(entry.name)}.json"
+        relative_path = _payload_relative_path(entry, payload_mode)
         payload_path = bundle_dir / relative_path
-        _write_json(payload_path, _payload_descriptor(entry))
+        if payload_mode == "descriptor":
+            _write_json(payload_path, _payload_descriptor(entry))
+        else:
+            _fetch_payload(entry, payload_path)
         artifacts.append(
             {
                 "artifactType": entry.artifact_type,
                 "destinationName": entry.destination_name,
                 "lockHash": entry.content_hash,
                 "name": entry.name,
+                "payloadMode": payload_mode,
                 "path": relative_path.as_posix(),
                 "sha256": _sha256_file(payload_path),
             }
@@ -254,6 +266,7 @@ def build_bundle(
             for hook in metadata_hooks
         ],
         "networkRequiredForVerification": False,
+        "payloadMode": payload_mode,
         "promotedImages": _image_map_from_lock(lock, compatibility_set, private_registry),
     }
     inventory_path = bundle_dir / "inventory.json"
@@ -276,6 +289,7 @@ def build_bundle(
         "logicalInventoryDigest": str(inventory["logicalInventoryDigest"]),
         "metadataHooks": list(metadata_hooks),
         "networkRequiredForVerification": False,
+        "payloadMode": payload_mode,
         "status": "built",
     }
     if split_metadata is not None:
@@ -595,6 +609,73 @@ def _payload_descriptor(entry: LockEntry) -> JsonDict:
             "sourceHash": entry.content_hash,
         },
     }
+
+
+def _payload_relative_path(entry: LockEntry, payload_mode: str) -> Path:
+    suffix = ".json"
+    if payload_mode == "fetch":
+        suffix = ".oci.tar" if entry.is_image else ".payload"
+    return Path("payloads") / f"{_safe_file_name(entry.name)}{suffix}"
+
+
+def _fetch_payload(entry: LockEntry, payload_path: Path) -> None:
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    if entry.is_image:
+        _fetch_image_payload(entry, payload_path)
+        return
+    source = entry.canonical_source
+    if source.startswith("file://"):
+        source_path = Path(source.removeprefix("file://"))
+        if not source_path.exists():
+            msg = f"source file does not exist for {entry.name}: {source_path}"
+            raise BundleError(msg)
+        shutil.copyfile(source_path, payload_path)
+    elif source.startswith(("https://", "http://")):
+        with url_request.urlopen(source, timeout=60) as response, payload_path.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
+    else:
+        source_path = Path(source)
+        if not source_path.exists():
+            msg = (
+                f"unsupported non-image source for {entry.name}: {source}. "
+                "Use file://, http://, https://, or an existing local path."
+            )
+            raise BundleError(msg)
+        shutil.copyfile(source_path, payload_path)
+    if entry.sha256 is not None:
+        actual = _sha256_file(payload_path)
+        if actual != entry.sha256:
+            msg = f"downloaded payload checksum mismatch for {entry.name}"
+            raise BundleError(msg)
+
+
+def _fetch_image_payload(entry: LockEntry, payload_path: Path) -> None:
+    command: tuple[str, ...]
+    if shutil.which("skopeo"):
+        command = (
+            "skopeo",
+            "copy",
+            f"docker://{entry.canonical_source}",
+            f"oci-archive:{payload_path}:{entry.destination_name.split('@', 1)[0]}",
+        )
+    elif shutil.which("docker"):
+        pull = subprocess.run(
+            ("docker", "pull", entry.canonical_source),
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        if pull.returncode != 0:
+            msg = f"docker pull failed for {entry.name}: {pull.stderr.strip()}"
+            raise BundleError(msg)
+        command = ("docker", "save", "-o", str(payload_path), entry.canonical_source)
+    else:
+        msg = "payload fetch for OCI images requires skopeo or docker"
+        raise BundleError(msg)
+    completed = subprocess.run(command, capture_output=True, check=False, text=True)
+    if completed.returncode != 0:
+        msg = f"image payload fetch failed for {entry.name}: {completed.stderr.strip()}"
+        raise BundleError(msg)
 
 
 def _logical_inventory(lock: SourceLock, compatibility_set: str) -> JsonDict:

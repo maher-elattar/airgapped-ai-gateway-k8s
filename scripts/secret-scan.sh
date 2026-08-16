@@ -32,7 +32,7 @@ while IFS= read -r -d '' path; do
   [ -e "$path" ] || continue
 
   case "$path" in
-    .env|.env.*|*.env|*.env.*|*keys*.env|generated-consumer-keys.env)
+    *.env|*.env.*)
       if [ "$path" != ".env.example" ]; then
         echo "blocked secret-like environment file: $path" >&2
         failed=1
@@ -41,7 +41,7 @@ while IFS= read -r -d '' path; do
   esac
 
   case "$path" in
-    *kubeconfig*|*.kubeconfig|*.kubeconfig.yaml|*.kubeconfig.yml)
+    *kubeconfig*)
       echo "blocked kubeconfig-like file path: $path" >&2
       failed=1
       ;;

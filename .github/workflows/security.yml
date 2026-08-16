@@ -1,0 +1,120 @@
+name: security
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-gates:
+    name: security-gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository with full history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Install Python security tooling
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -c constraints.txt -r requirements-dev.txt -e .
+          python -m pip install --disable-pip-version-check pip-audit==2.9.0
+
+      - name: Install Gitleaks and actionlint
+        env:
+          GITLEAKS_URL: https://github.com/gitleaks/gitleaks/releases/download/v8.29.1/gitleaks_8.29.1_linux_x64.tar.gz
+          GITLEAKS_SHA256: e4eb209d04e20339d77122a3bdf9cd41351255cfb27ebcb75e85325e04f88924
+          ACTIONLINT_URL: https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+        run: |
+          set -euo pipefail
+          tools_dir="${RUNNER_TEMP}/ci-tools"
+          bin_dir="${tools_dir}/bin"
+          mkdir -p "${bin_dir}"
+          curl -fsSL "${GITLEAKS_URL}" -o "${tools_dir}/gitleaks.tar.gz"
+          echo "${GITLEAKS_SHA256}  ${tools_dir}/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "${tools_dir}/gitleaks.tar.gz" -C "${bin_dir}" gitleaks
+          chmod +x "${bin_dir}/gitleaks"
+          curl -fsSL "${ACTIONLINT_URL}" -o "${tools_dir}/actionlint.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${tools_dir}/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "${tools_dir}/actionlint.tar.gz" -C "${bin_dir}" actionlint
+          chmod +x "${bin_dir}/actionlint"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Full-history secret scan
+        run: |
+          set -euo pipefail
+          gitleaks detect --source . --no-banner --redact --verbose
+          scripts/secret-scan.sh --all
+          python scripts/pre_publication_scan.py --working-tree --history --max-bytes 5242880
+
+      - name: Dependency audit
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/security"
+          pip-audit \
+            -r requirements.txt \
+            -r requirements-dev.txt \
+            --format=json \
+            --output="${RUNNER_TEMP}/security/pip-audit.json"
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: ${{ runner.temp }}/security/trivy-fs.json
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Trivy Kubernetes config scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          format: json
+          output: ${{ runner.temp }}/security/trivy-config.json
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+
+      - name: Workflow scan
+        run: |
+          set -euo pipefail
+          actionlint -color=false
+          python scripts/validate_workflows.py
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: .
+          format: spdx-json
+          output-file: ${{ runner.temp }}/security/sbom.spdx.json
+          upload-artifact: false
+
+      - name: Upload security evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: security-evidence
+          path: |
+            ${{ runner.temp }}/security/*.json
+          if-no-files-found: error
+          retention-days: 7
