@@ -1,0 +1,25 @@
+sequenceDiagram
+  autonumber
+  participant Operator
+  participant CLI
+  participant Git as Authored source
+  participant API as Kubernetes API
+  participant Gateway as agentgateway
+  participant Edge as Retained edge
+
+  Operator->>CLI: discover
+  CLI-->>Operator: candidates and required overrides
+  Operator->>CLI: deploy plan
+  CLI->>Git: read config and manifests
+  CLI-->>Operator: deterministic JSON plan and Markdown summary
+  Operator->>CLI: deploy apply with expected context and confirmation
+  CLI->>API: save pre-change snapshot
+  CLI->>API: apply planned resources
+  CLI->>Gateway: poll Programmed, Accepted, ResolvedRefs, Attached
+  CLI-->>Operator: verification report
+  Operator->>CLI: cutover plan
+  CLI-->>Operator: edge change and rollback point
+  Operator->>CLI: cutover apply
+  CLI->>Edge: apply approved edge change
+  Operator->>CLI: rollback apply if validation fails
+  CLI->>API: restore pre-existing resources and delete only created resources

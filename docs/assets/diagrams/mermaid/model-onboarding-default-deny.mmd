@@ -1,0 +1,13 @@
+flowchart TB
+  start["New model request"]
+  key["Choose one stable model key"]
+  service["Declare backend Service and port"]
+  route["Create one HTTPRoute for the model"]
+  policy["Attach route policy with no broad grants"]
+  deny["Existing consumers remain denied"]
+  tests["Add 401, 403, 200, route, and image tests"]
+  grant["Grant explicit consumer permission"]
+  verify["Verify allowed and denied consumers"]
+  release["Promote through bundle and deployment workflow"]
+
+  start --> key --> service --> route --> policy --> deny --> tests --> grant --> verify --> release

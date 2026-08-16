@@ -1,0 +1,33 @@
+flowchart TD
+  signal["Start with the response or condition signal"]
+  s401{"401?"}
+  s403{"403?"}
+  s404{"404?"}
+  s429{"429?"}
+  resolved{"ResolvedRefs=False?"}
+  attached{"Attached=False?"}
+  programmed{"Programmed=False?"}
+  identity["Check missing or unknown API key"]
+  entitlement["Check consumer permission on the model route"]
+  route["Check Host header, listener, and path match"]
+  ratelimit["Check descriptor keys, consumer_id, Redis, and counter path"]
+  backend["Check Service name, namespace, port, and ReferenceGrant mode"]
+  policy["Check policy targetRef, status, and route attachment"]
+  controller["Check controller, CRDs, GatewayClass, and generated data plane"]
+  upstream["If conditions are healthy, inspect backend health and gateway logs"]
+
+  signal --> s401
+  s401 -- "Yes" --> identity
+  s401 -- "No" --> s403
+  s403 -- "Yes" --> entitlement
+  s403 -- "No" --> s404
+  s404 -- "Yes" --> route
+  s404 -- "No" --> s429
+  s429 -- "Yes" --> ratelimit
+  s429 -- "No" --> resolved
+  resolved -- "Yes" --> backend
+  resolved -- "No" --> attached
+  attached -- "Yes" --> policy
+  attached -- "No" --> programmed
+  programmed -- "Yes" --> controller
+  programmed -- "No" --> upstream

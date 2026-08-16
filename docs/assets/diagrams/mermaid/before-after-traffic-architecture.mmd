@@ -1,0 +1,30 @@
+flowchart LR
+  subgraph before["Before: direct model exposure"]
+    appBefore["Application workloads"]
+    edgeBefore["Existing edge"]
+    qwenBefore["Qwen Service"]
+    gemmaBefore["Gemma Service"]
+    embedBefore["Embedding Service"]
+    appBefore --> edgeBefore
+    edgeBefore --> qwenBefore
+    edgeBefore --> gemmaBefore
+    edgeBefore --> embedBefore
+  end
+
+  subgraph after["After: policy gateway in the inference path"]
+    appAfter["Application workloads"]
+    edgeAfter["Retained edge or direct internal client"]
+    gateway["agentgateway Gateway"]
+    routeQwen["HTTPRoute: qwen-chat"]
+    routeGemma["HTTPRoute: gemma-chat"]
+    routeEmbed["HTTPRoute: embedding-index"]
+    policy["Authentication, authorization, rate limits, metrics"]
+    qwenAfter["Qwen backend"]
+    gemmaAfter["Gemma backend"]
+    embedAfter["Embedding backend"]
+    appAfter --> edgeAfter --> gateway
+    gateway --> policy
+    policy --> routeQwen --> qwenAfter
+    policy --> routeGemma --> gemmaAfter
+    policy --> routeEmbed --> embedAfter
+  end

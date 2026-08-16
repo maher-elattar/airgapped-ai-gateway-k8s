@@ -22,7 +22,7 @@ def main() -> int:
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if actual != expected:
             raise SystemExit(f"hash mismatch: {path}")
-    print(f"diagram assets verified: {len(assets)} files")
+    print(f"assets verified: {len(assets)} files")
     return 0
 
 

@@ -2,18 +2,25 @@
 
 ## Context
 
-The platform needs one stable entry point for internal AI traffic while keeping model authorization understandable as the number of models and consumers grows.
+The platform needs one stable entry point for internal AI traffic, and it needs
+model authorization to stay comprehensible as the number of models and consumers
+grows. Those two goals pull in slightly different directions: one object is
+easier to operate, many objects are easier to reason about individually.
 
-The reference architecture uses a single model gateway and one HTTPRoute per model. That keeps the model-to-policy relationship direct: if an application is denied on one model but allowed on another, the operator can inspect one route and one policy boundary for that model.
+The compromise here is a single model gateway with one HTTPRoute per model. It
+keeps the model-to-policy relationship direct. When an application is denied on
+one model and allowed on another, there is one route and one policy to inspect,
+not a shared object with conditional behavior inside it.
 
 ## Decision
 
-Use one Gateway for the AI platform and a separate HTTPRoute for each model-facing API.
+Use one Gateway for the AI platform and a separate HTTPRoute for each
+model-facing API.
 
 Each model route owns:
 
 - host and path matching for that model API;
-- backend reference for the tested route type;
+- the backend reference for the tested route type;
 - route-targeted authorization and rate-limit policy;
 - model-specific validation tests.
 
@@ -22,32 +29,35 @@ The Gateway owns:
 - listener scope;
 - allowed route attachment;
 - generated data-plane lifecycle;
-- broad platform entry-point behavior.
+- platform entry-point behavior.
 
 ## Alternatives
 
 1. One route containing all model paths.
-   - Rejected because policy ownership becomes less obvious and failures are harder to isolate.
+   - Rejected. Policy ownership stops being obvious and failures get harder to
+     isolate.
 2. One Gateway per model.
-   - Rejected for the baseline because it creates more generated data planes and operational overhead before there is a need.
+   - Rejected for the baseline. It multiplies generated data planes and
+     operational overhead before there is any need for it.
 3. Keep using only the existing edge routes.
-   - Rejected because the edge does not provide the AI-specific policy and observability boundary.
+   - Rejected. The edge does not provide the AI-specific policy and
+     observability boundary this platform exists for.
 
 ## Consequences
 
-- Adding a model creates a visible route/policy unit.
-- Authorization remains easy to audit per model.
+- Adding a model produces a visible route and policy unit.
+- Authorization stays auditable per model.
 - Same-namespace routing is the default trust boundary.
 - Cross-namespace routing requires explicit ReferenceGrant design.
-- Operators must avoid route sprawl by keeping names derived from one model key.
+- Route sprawl becomes a real risk, so names stay derived from one model key.
 
 ## Validation
 
-Future validation must prove:
+Validation has to prove:
 
-- Gateway is programmed.
-- Each HTTPRoute is attached and resolved.
-- Missing key returns 401.
-- Known but unauthorized consumer returns 403.
-- Authorized consumer reaches only the intended model.
-- Unknown model paths do not expose unintended NIM endpoints.
+- the Gateway is programmed;
+- each HTTPRoute is attached and resolved;
+- a missing key returns 401;
+- a known but unauthorized consumer returns 403;
+- an authorized consumer reaches only the intended model;
+- unknown model paths do not expose unintended NIM endpoints.

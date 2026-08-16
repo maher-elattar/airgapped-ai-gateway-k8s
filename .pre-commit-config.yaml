@@ -31,8 +31,8 @@ repos:
         entry: python scripts/validate_manifests.py
         language: system
         pass_filenames: false
-      - id: portfolio-secret-boundary
-        name: portfolio secret boundary
+      - id: secret-boundary
+        name: secret boundary
         entry: scripts/secret-scan.sh --staged
         language: system
         pass_filenames: false

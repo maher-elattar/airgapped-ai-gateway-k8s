@@ -1,0 +1,30 @@
+flowchart TD
+  request["Request enters gateway"]
+  host{"Host and path match a model route?"}
+  key{"API key present?"}
+  known{"Key maps to a consumer?"}
+  allowed{"Consumer has route permission?"}
+  limited{"Rate-limit counter exceeded?"}
+  backend{"Backend reference ready?"}
+  model["Forward to model backend"]
+  ok["200 response"]
+  missing["401 missing identity"]
+  unknown["401 unknown identity"]
+  denied["403 entitlement denied"]
+  tooMany["429 rate limit"]
+  notFound["404 no route"]
+  upstream["5xx or route condition diagnostic"]
+
+  request --> host
+  host -- "No" --> notFound
+  host -- "Yes" --> key
+  key -- "No" --> missing
+  key -- "Yes" --> known
+  known -- "No" --> unknown
+  known -- "Yes" --> allowed
+  allowed -- "No" --> denied
+  allowed -- "Yes" --> limited
+  limited -- "Yes" --> tooMany
+  limited -- "No" --> backend
+  backend -- "No" --> upstream
+  backend -- "Yes" --> model --> ok

@@ -74,9 +74,20 @@ check_content "API-key-like token" '(^|[^A-Za-z0-9_])sk-[A-Za-z0-9][A-Za-z0-9_-]
 check_content "consumer API key material" 's[k]-consumer-[A-Za-z0-9._-]{6,}'
 check_content "kubeconfig credential marker" '(client[-]certificate[-]data|client[-]key[-]data|certificate[-]authority[-]data|current[-]context:)'
 check_content "private key block" '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-check_content "private registry name" 'registry.example.internal:5000'
-check_content "private environment domain" 'example.internal'
 check_content "Kubernetes secret manifest content" '(^kind:[[:space:]]*Secret[[:space:]]*$|^string[D]ata:)'
+
+# Environment-specific identifiers (internal domains, private registry hosts) are
+# not committed here. Keep them in an untracked local denylist instead: one
+# extended-regex pattern per line, blank lines and # comments ignored.
+denylist="${SECRET_SCAN_DENYLIST:-.secret-scan-denylist}"
+if [ -f "$denylist" ]; then
+  while IFS= read -r pattern; do
+    case "$pattern" in
+      ''|'#'*) continue ;;
+    esac
+    check_content "denylisted environment identifier" "$pattern"
+  done <"$denylist"
+fi
 
 if [ "$failed" -ne 0 ]; then
   echo "secret boundary scan failed" >&2

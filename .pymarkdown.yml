@@ -3,3 +3,5 @@ plugins:
     enabled: false
   md024:
     siblings_only: true
+  md033:
+    allowed_elements: "!--,![CDATA[,!DOCTYPE,img"

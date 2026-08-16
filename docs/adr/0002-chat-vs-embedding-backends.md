@@ -2,17 +2,29 @@
 
 ## Context
 
-The delivered baseline is agentgateway v1.3.1. In this baseline, OpenAI-compatible chat endpoints use AgentgatewayBackend configured as an AI provider backend. Embedding endpoints are treated as a different API shape and should not be forced into a chat-style abstraction.
+The delivered baseline is agentgateway v1.3.1. In that version, OpenAI-compatible
+chat endpoints work naturally with AgentgatewayBackend configured as an AI
+provider backend.
 
-The embedding route still needs gateway policy. The difference is only the final backend representation.
+Embeddings are a different API shape. A chat request carries a `messages[]`
+array; an embedding request carries `input` and goes to `/v1/embeddings`. Trying
+to represent the embedding endpoint through the same chat-style
+AgentgatewayBackend made the gateway expect chat request semantics, and requests
+failed on a missing `messages` field.
+
+Rather than bend the embedding API into an abstraction that does not fit it, the
+baseline routes embeddings differently. The route still needs every gateway
+policy; only the final backend representation changes.
 
 ## Decision
 
-Use AgentgatewayBackend for OpenAI-compatible chat completion routes in the v1.3.1 baseline.
+For the v1.3.1 baseline:
 
-Route embedding APIs through agentgateway to the normal Kubernetes Service backend in the v1.3.1 baseline.
+- OpenAI-compatible chat completion routes use AgentgatewayBackend.
+- Embedding APIs route through agentgateway to the normal Kubernetes Service
+  backend.
 
-Both route types must still receive:
+Both route types still receive:
 
 - authentication;
 - authorization;
@@ -23,25 +35,30 @@ Both route types must still receive:
 ## Alternatives
 
 1. Force embeddings through the chat AgentgatewayBackend abstraction.
-   - Rejected because the tested baseline expected chat request semantics and failed on embedding request shape.
+   - Rejected. The tested baseline expected chat request semantics and failed on
+     the embedding request shape.
 2. Bypass agentgateway for embeddings.
-   - Rejected because embeddings still require identity, authorization, rate limiting, and observability.
-3. Claim newer agentgateway behavior without testing.
-   - Rejected because this repository preserves the delivered baseline until compatibility tests pass.
+   - Rejected. Embeddings still need identity, authorization, rate limiting, and
+     observability, and routing around the gateway would give up all four.
+3. Claim newer agentgateway behavior without testing it.
+   - Rejected. The delivered baseline is preserved until compatibility tests
+     pass.
 
 ## Consequences
 
 - Chat and embedding routes have different backend manifests.
-- Rate limits may use different descriptors because chat token accounting and embedding request accounting are not equivalent.
-- Tests must cover both route types.
-- Upgrade work must explicitly retest embedding behavior.
+- Rate limits may need different descriptors, since chat token accounting and
+  embedding request accounting are not equivalent.
+- Tests have to cover both route types.
+- Any upgrade has to explicitly retest embedding behavior, because this is
+  version-specific behavior rather than a permanent property of the design.
 
 ## Validation
 
-Future validation must prove:
+Validation has to prove:
 
-- chat route accepts valid chat completion request shape;
-- embedding route accepts valid embedding request shape;
-- embedding route does not fail due to missing chat message fields;
-- authorized and denied consumers behave consistently for both route classes;
+- the chat route accepts a valid chat completion request shape;
+- the embedding route accepts a valid embedding request shape;
+- the embedding route does not fail on missing chat message fields;
+- authorized and denied consumers behave consistently across both route classes;
 - rate-limit descriptors are correct for both route classes.

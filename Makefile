@@ -6,7 +6,7 @@ AIRGAP_COMPAT ?= baseline-v1.3.1
 AIRGAP_DIST ?= dist/airgap-demo
 AIRGAP_REGISTRY ?= registry.example.internal:5000
 
-.PHONY: setup lint test render validate diagrams kind-test security-scan airgap-demo
+.PHONY: setup lint test render validate diagrams docs-check kind-test security-scan airgap-demo
 
 setup:
 	$(PYTHON) -m pip install -c constraints.txt -r requirements-dev.txt -e .
@@ -16,7 +16,7 @@ lint:
 	ruff check .
 	mypy src tests
 	yamllint .
-	pymarkdown --config .pymarkdown.yml scan README.md docs
+	pymarkdown --config .pymarkdown.yml scan README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab
 
 test:
 	pytest
@@ -31,6 +31,9 @@ validate:
 
 diagrams:
 	$(PYTHON) scripts/verify_assets.py
+
+docs-check:
+	$(PYTHON) scripts/check_links.py README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab
 
 kind-test:
 	$(PYTHON) scripts/kind_e2e_lab.py run

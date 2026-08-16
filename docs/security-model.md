@@ -1,6 +1,12 @@
 # Security Model
 
-This document defines the security contract for the air-gapped AI gateway platform. It documents the baseline limitations directly instead of hiding them behind future upgrade assumptions.
+The gateway sits between internal applications and model APIs, which means its
+security model has to be written down rather than assumed. It owns workload
+identity, per-model authorization, rate-limit metadata, observability, and the
+handling of runtime credentials. What it must not become is a convenient place to
+hide unclear ownership behind a proxy.
+
+![Authentication, authorization, rate-limit, and backend decision flow](assets/diagrams/rendered/policy-decision-flow.svg)
 
 ## Scope
 
@@ -14,13 +20,13 @@ In scope:
 - Observability and redaction.
 - Safe discovery, backup, cleanup, and context verification.
 
-Out of scope for this repository phase:
+Out of scope here:
 
 - Direct production cluster operations.
 - Real secrets.
 - Production identity-provider integration.
 - Browser frontend implementation.
-- NVIDIA NIM model hardening beyond gateway integration boundaries.
+- NVIDIA NIM model hardening beyond the gateway integration boundary.
 
 ## Assets
 
@@ -53,12 +59,14 @@ Out of scope for this repository phase:
 ## Threat actors
 
 - External client attempting unauthenticated access.
-- Authorized application attempting to call a model outside its entitlement.
+- Authorized application calling a model outside its entitlement.
 - Compromised application leaking or abusing its gateway credential.
 - Internal operator applying a partial or wrong policy manifest.
-- Developer accidentally committing runtime credentials or environment-specific identifiers.
+- Developer accidentally committing runtime credentials or environment-specific
+  identifiers.
 - Supply-chain actor replacing an air-gap image, chart, or CRD payload.
-- Workload in the cluster attempting lateral movement to NIM or rate-limit services.
+- Workload in the cluster attempting lateral movement to NIM or rate-limit
+  services.
 - Browser user extracting a long-lived key from frontend JavaScript.
 
 ## Abuse cases and mitigations
@@ -67,26 +75,28 @@ Out of scope for this repository phase:
 | --- | --- | --- |
 | Missing or invalid API key | Unauthorized use of model API | Strict authentication; 401 response; no anonymous production model routes |
 | Known key calls unauthorized model | Permission bypass attempt | Per-route authorization; default-deny model onboarding; 403 response |
-| One shared API key for many apps | No attribution; wide blast radius | One stable consumer identity per workload/application |
+| One shared API key for many apps | No attribution; wide blast radius | One stable consumer identity per workload |
 | Key copied into browser JavaScript | Public credential exposure | Browser calls the application backend; backend stores runtime key outside frontend code |
 | Raw key leaked through logs | Credential compromise | Log redaction; never echo runtime secrets; scanner blocks key-like material |
 | Partial consumer state applied | Existing consumers deleted or permissions changed accidentally | Back up state first; generate full intended state; review diffs; test allowed and denied paths |
 | Generated data-plane Deployment patched manually | Drift; reconciliation overwrite; non-reproducible state | Change authored inputs instead of editing reconciled output |
-| Wrong cluster context | Real environment changed unintentionally | Print and verify context before any cluster-changing command; fail closed on mismatch |
+| Wrong cluster context | Real environment changed by mistake | Print and verify context before any cluster-changing command; fail closed on mismatch |
 | Air-gap artifact replaced | Untrusted runtime code | SHA-256 inventory; private registry import; immutable tags or digests |
 | Cross-namespace backend target added casually | Unauthorized namespace trust | Keep same namespace by default; require explicit ReferenceGrant for cross-namespace routing |
-| Rate-limit service unavailable or bypassed | Quota policy fails or traffic outage | Decide fail behavior deliberately; isolate with NetworkPolicies; design HA if SLO requires |
+| Rate-limit service unavailable or bypassed | Quota policy fails or traffic outage | Choose the fail behavior explicitly; isolate with NetworkPolicies; design HA if the SLO requires it |
 | NIM admin or health endpoint exposed | Expanded attack surface | Publish only intended inference APIs; keep operational endpoints internal |
 
 ## Required security controls
 
 ### Secret encryption at rest
 
-If Kubernetes Secrets are used, the cluster must enable Secret encryption at rest. This is mandatory for the tested v1.3.1 raw-key path.
+If Kubernetes Secrets hold the credentials, the cluster must have Secret
+encryption at rest enabled. This matters more than usual on the tested v1.3.1
+raw-key path.
 
 ### Least-privilege RBAC
 
-RBAC must restrict:
+RBAC has to restrict:
 
 - Who can read or update runtime credential objects.
 - Who can modify Gateway, HTTPRoute, and agentgateway policy resources.
@@ -105,18 +115,20 @@ NetworkPolicies should restrict:
 
 ### Key rotation
 
-Key rotation must support overlap:
+Rotation has to support overlap:
 
 1. Add a new credential for the same consumer identity.
 2. Deploy the application with the new key.
 3. Verify traffic with the new key.
 4. Remove or disable the old key.
 
-Disabling a consumer is different from revoking a key. Disabling preserves an audit record and prevents model access. Revocation removes or invalidates credential material.
+Disabling a consumer is not the same as revoking a key. Disabling keeps the audit
+record and blocks model access. Revocation removes or invalidates the credential
+material itself.
 
 ### Log redaction
 
-Normal logs and generated reports must not include:
+Normal logs and generated reports must not contain:
 
 - API keys.
 - Secret values.
@@ -124,38 +136,47 @@ Normal logs and generated reports must not include:
 - environment-specific domains or registry names.
 - raw Authorization headers.
 
-Scripts and tests must print object names and status, not secret payloads.
+Scripts and tests print object names and status. They do not print payloads.
 
 ### External secret integrations
 
-Production integrations should use an approved secret manager through a controller such as External Secrets Operator, Secrets Store CSI Driver, sealed-secret workflow, or another organization-approved system.
+Production integrations should pull from an approved secret manager through a
+controller such as External Secrets Operator, the Secrets Store CSI Driver, a
+sealed-secret workflow, or whatever the organization already standardizes on.
 
-The repository should contain:
+The repository holds:
 
 - Secret names.
 - Label contracts.
 - Required metadata schema.
 - External-secret wiring examples with fake values only.
 
-The repository must not contain runtime secret values.
+It does not hold runtime secret values.
 
 ## Fail-closed operations
 
 ### Discovery
 
-Discovery must fail closed when inputs are missing, ambiguous, or inconsistent. It should produce a plan or report before any apply step. Operators must override ambiguous choices explicitly instead of letting automation guess a production target.
+Discovery fails closed when inputs are missing, ambiguous, or inconsistent, and
+it produces a plan or report before anything applies. An operator resolves an
+ambiguous choice explicitly rather than letting automation guess at a target.
 
 ### Backup
 
-Before cutover, consumer-state changes, route changes, or cleanup, automation must capture recoverable backups of the relevant existing state. Backups are operational artifacts and must not include unredacted secrets in Git.
+Before cutover, consumer-state changes, route changes, or cleanup, automation
+captures a recoverable backup of the relevant existing state. Those backups are
+operational artifacts and carry sensitive environment data, so handle them
+accordingly.
 
 ### Cleanup
 
-Cleanup must verify whether traffic still depends on the gateway before deleting resources. Removing policy is not the correct way to remove one consumer's access; adjust consumer state instead.
+Cleanup checks whether traffic still depends on the gateway before it deletes
+anything. Removing a policy is also the wrong way to remove one consumer's
+access; change the consumer state instead.
 
 ### Context verification
 
-Any cluster-changing workflow exposed by this project must:
+Any cluster-changing workflow in this project has to:
 
 - print the current Kubernetes context;
 - verify it matches the explicitly configured expected context;
@@ -165,20 +186,20 @@ Any cluster-changing workflow exposed by this project must:
 
 Adding a model must not grant access to existing consumers automatically.
 
-Required onboarding behavior:
+Required behavior:
 
 - Verify the NIM Service works before routing through the gateway.
 - Add route and backend resources for the model.
 - Keep existing consumers denied by default.
-- Grant only selected consumers explicitly.
-- Add rate-limit entries deliberately.
+- Grant only selected consumers, explicitly.
+- Add rate-limit entries explicitly.
 - Test allowed, denied, unknown, and rate-limited paths.
 
 ## Browser frontend rule
 
-Long-lived model or gateway API keys must not be placed in public browser JavaScript.
+Long-lived model or gateway API keys do not go into public browser JavaScript.
 
-Preferred pattern:
+The pattern:
 
 ```text
 browser
@@ -187,13 +208,16 @@ browser
   -> model
 ```
 
-If direct browser access is ever required, it must use a separate short-lived token design with explicit threat review. That is not part of the delivered baseline.
+If direct browser access is ever genuinely required, it needs a short-lived token
+design and its own threat review. That is not part of the delivered baseline.
 
-## Baseline limitation: raw keys in v1.3.1
+## Important v1.3.1 security note
 
-The tested agentgateway v1.3.1 path stores API keys as raw runtime credentials in Kubernetes Secret objects. This is a production limitation.
+The tested agentgateway v1.3.1 path stores API keys as raw runtime credentials in
+Kubernetes Secret objects. That is a real constraint, and it should be treated as
+one rather than papered over.
 
-Minimum controls for this limitation:
+Minimum controls while it applies:
 
 - Kubernetes Secret encryption at rest.
 - Strict RBAC on credential objects.
@@ -204,20 +228,26 @@ Minimum controls for this limitation:
 
 ## Upgrade note: hashed keys in v1.4.0
 
-agentgateway v1.4.0 advertises support for virtual keys sourced from ConfigMaps and API keys stored as SHA-256 hashes. That is a security improvement target, not a baseline change.
+agentgateway v1.4.0 advertises virtual keys sourced from ConfigMaps and API keys
+stored as SHA-256 hashes. That is a genuine security improvement and a target
+worth aiming at, but it is not a baseline change until it is tested here.
 
-This repository must keep v1.4.0 in a separate compatibility track until tests prove:
+v1.4.0 stays on a separate compatibility track until tests prove:
 
 - hashed-key authentication works for the intended routes;
 - metadata still drives authorization, rate limits, and observability;
 - Gateway API version changes are handled;
-- rollback remains reliable;
+- rollback still works;
 - docs and examples no longer imply raw-key storage.
 
 ## Residual risks
 
-- API keys remain bearer credentials. A stolen key is usable until disabled, revoked, or expired.
-- A simple Redis and rate-limit deployment may not meet high-availability requirements.
+- API keys are bearer credentials. A stolen key works until it is disabled,
+  revoked, or expired.
+- A single Redis and a single rate-limit Deployment will not meet
+  high-availability requirements.
 - Gateway-level policy does not replace model-level capacity management.
-- Cross-namespace routing is safe only when explicit trust objects and ownership rules are present.
-- Air-gap integrity depends on disciplined artifact inventory and private registry operation.
+- Cross-namespace routing is only safe with explicit trust objects and clear
+  ownership rules.
+- Air-gap integrity depends on disciplined artifact inventory and a well-run
+  private registry.

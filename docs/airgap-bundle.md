@@ -1,55 +1,55 @@
 # Air-Gap Bundle Workflow
 
+In an air-gapped cluster, dependency management is part of the architecture.
+There is no safe version of "install it now and let the cluster pull whatever it
+needs later." The CRDs, charts, images, Python wheels, tooling, checksums, and
+registry names all have to be known before the install starts.
+
 ![Air-gap dependency graph](assets/diagrams/article/05-airgap-dependency-graph.png)
 
-The platform uses a two-sided delivery model. The connected side resolves and
-packages the exact dependency set. The disconnected side verifies that set,
-promotes images into the internal registry, and proves that the rendered
-deployment points only at promoted internal names.
+## The operating model
 
-This keeps the installation path predictable. The cluster does not become the
-place where dependencies are discovered, patched, or improvised. The cluster
-receives a declared version set, a declared image map, and manifests rendered
-from the repository source of truth.
+The workflow has two sides:
+
+- Connected side: resolve, fetch, verify, package, and record the dependency set.
+- Disconnected side: verify the package with no network access, promote images to
+  the internal registry, and prove the rendered manifests only reference promoted
+  names.
+
+![Connected-side to offline-side supply chain](assets/diagrams/rendered/airgap-supply-chain.svg)
 
 ## Compatibility set
 
-The delivered compatibility set is `baseline-v1.3.1`.
-
-It includes:
+The delivered set is `baseline-v1.3.1`. It covers:
 
 - Gateway API v1.5.0 experimental CRDs.
 - agentgateway v1.3.1 CRD and controller charts.
 - agentgateway controller and generated data-plane images.
-- Redis and Envoy ratelimit images used by the demo rate-limit path.
-- Runtime Python wheel dependencies for the CLI.
+- Redis and Envoy ratelimit images for the demo rate-limit path.
+- Python wheel dependencies for the CLI.
 - Required validation and packaging tools.
-- Small test fixture images for disposable validation workflows.
+- Small test fixture images for the disposable lab.
 
-Each entry in `airgap/sources.lock.yaml` has a version, canonical source,
-destination name, checksum or OCI digest, provenance note, license note, and
-compatibility-set membership.
+Each entry in [airgap/sources.lock.yaml](../airgap/sources.lock.yaml) records the
+version, canonical source, destination name, checksum or OCI digest, provenance
+note, license note, and compatibility-set membership.
 
-## Connected build side
+Prepare and test all of it as one version set. Transferring agentgateway v1.3.1
+and then picking up a different CRD revision later is how you find an API
+incompatibility during the maintenance window instead of before it.
 
-The connected side performs dependency acquisition and bundle assembly.
+## Connected-side build
 
-The normal flow is:
+Dependency resolution happens on the connected side:
 
-1. Validate `airgap/sources.lock.yaml`.
-2. Fetch every source artifact from its canonical source.
+1. Validate the source lock.
+2. Fetch every artifact from its canonical source.
 3. Verify every fetched payload against the lock.
-4. Export OCI images as OCI-native archives where practical.
-5. Include Helm charts, CRD manifests, Python wheels, and tool archives.
-6. Write a deterministic bundle inventory and checksum manifest.
-7. Attach optional metadata such as SBOM, malware scan, and signature results.
-8. Split the bundle into transfer-media parts when required.
-
-The repository implementation keeps the deterministic inventory, checksum, and
-promotion planning logic in the CLI. Large payloads are produced under `dist/`,
-which is intentionally outside version control.
-
-Example:
+4. Export images as OCI-native archives where practical.
+5. Include charts, CRDs, wheels, and tools.
+6. Write the deterministic inventory and checksum manifest.
+7. Attach optional metadata such as SBOM, malware scan, or signature reports.
+8. Split the bundle for transfer media when required.
 
 ```bash
 airgap-ai-gateway bundle build \
@@ -60,24 +60,11 @@ airgap-ai-gateway bundle build \
   --metadata-hook signature
 ```
 
-The build output is an audit package. It records the logical inventory, payload
-checksums, optional metadata hook declarations, and the internal image names that
-the disconnected side must promote.
+Large payloads are written under `dist/`, which is outside version control.
 
-## Disconnected verification side
+## Offline verification
 
-The disconnected side must be able to verify the bundle with no network path.
-
-The normal flow is:
-
-1. Read the source lock and bundle inventory.
-2. Recompute every payload checksum.
-3. Compare the inventory against the lock.
-4. Verify split parts before reassembly.
-5. Produce a JSON verification report.
-6. Refuse promotion or install when any byte has changed.
-
-Example:
+The disconnected side has to be able to verify the bundle without a network path:
 
 ```bash
 airgap-ai-gateway bundle verify \
@@ -86,32 +73,26 @@ airgap-ai-gateway bundle verify \
   --bundle-dir dist/airgap-bundles/baseline-v1.3.1
 ```
 
-The verifier is intentionally offline. It reads local files only. If the
-inventory, checksum file, payload descriptor, complete bundle, or transfer part
-does not match the lock, verification fails.
+The verifier recomputes local checksums and compares the bundle inventory against
+the lock. One changed byte fails verification.
 
 ## Registry promotion
 
-Image promotion is planned as an exact source-to-destination mapping.
+Promotion is an exact source-to-destination mapping.
 
-The preferred copy strategy is OCI-native:
+Preferred OCI-native copy:
 
 ```bash
 skopeo copy docker://SOURCE_DIGEST docker://INTERNAL_DESTINATION_DIGEST
 ```
 
-The Docker fallback remains documented for environments where `skopeo` is not
-available:
+Docker fallback:
 
 ```bash
 docker pull SOURCE_DIGEST
 docker tag SOURCE_DIGEST INTERNAL_DESTINATION_DIGEST
 docker push INTERNAL_DESTINATION_DIGEST
 ```
-
-For multi-node clusters, the supported strategy is to promote images into an
-internal registry reachable by every node. Loading images into only one node is
-not a reliable installation strategy for this platform.
 
 Generate the promotion plan:
 
@@ -123,14 +104,12 @@ airgap-ai-gateway registry promote \
   --output-file dist/airgap-bundles/promotion-plan.json
 ```
 
-The plan includes destination existence checks. Operators should run those
-checks before pushing, then promote the exact source digest to the exact internal
-destination name.
+For multi-node clusters, use an internal registry every node can reach. Loading
+images onto a single node works right up until something reschedules.
 
-## Rendered manifest proof
+## Rendered-manifest proof
 
-The final disconnected-side proof compares rendered manifests with the promoted
-image map.
+The last check compares the rendered manifests against the promoted image map:
 
 ```bash
 airgap-ai-gateway verify \
@@ -140,20 +119,28 @@ airgap-ai-gateway verify \
   --registry registry.example.internal:5000
 ```
 
-The check rejects public registries, mutable image tags, missing policies,
-unprotected routes, and rendered Secret data. The output must show that every
-image in the rendered deployment is one of the promoted internal references.
+It rejects public registries, mutable tags, missing policies, unprotected routes,
+and rendered Secret data.
+
+Worth repeating: air-gap compliance is not a one-time check at install. Any later
+chart update or manifest change can quietly reintroduce a public registry
+reference, so run this again after upgrades.
 
 ## Transfer media
 
-Large bundles can be split into fixed-size parts. Each part gets an individual
-SHA-256 checksum, and the complete file keeps its own checksum.
+Large bundles can be split into fixed-size parts. Each part carries its own
+SHA-256 checksum and so does the complete file. The disconnected side verifies
+the parts before reassembly and verifies the whole file afterwards.
 
-The disconnected side verifies parts before reassembly and verifies the complete
-file after reassembly. A single modified byte is enough to fail verification.
+## What stays in Git
 
-## Repository boundary
+Tracked here:
 
-The repository stores the lock, validation logic, source manifests, schemas,
-tests, and sample reports. It does not store bundle payloads, OCI
-archives, chart archives, wheelhouses, or generated install media.
+- Source lock.
+- Schemas and validation logic.
+- Kustomize source.
+- Bundle and promotion scripts.
+- Example reports.
+
+Not tracked: OCI archives, chart archives, wheelhouses, generated install media,
+or runtime bundle payloads.

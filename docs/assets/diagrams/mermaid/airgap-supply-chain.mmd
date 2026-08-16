@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph connected["Connected build side"]
+    lock["sources.lock.yaml"]
+    fetch["Fetch CRDs, charts, images, wheels, tools"]
+    verifyOnline["Verify checksums and digests"]
+    bundle["Write bundle inventory and payload"]
+    split["Optional split for transfer media"]
+  end
+
+  subgraph transfer["Controlled transfer"]
+    media["Transfer media with part checksums"]
+  end
+
+  subgraph offline["Disconnected verification side"]
+    reassemble["Reassemble bundle"]
+    verifyOffline["Verify bundle with zero network requests"]
+    promote["Promote images to internal registry"]
+    render["Render manifests against promoted image map"]
+    install["Install compatibility set"]
+  end
+
+  lock --> fetch --> verifyOnline --> bundle --> split --> media
+  media --> reassemble --> verifyOffline --> promote --> render --> install

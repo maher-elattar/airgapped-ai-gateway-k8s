@@ -1,0 +1,37 @@
+flowchart TB
+  subgraph source["Authored source of truth"]
+    config["Configuration"]
+    kustomize["Kustomize bases and overlays"]
+    imageMap["Image and version map"]
+  end
+
+  subgraph control["Control plane"]
+    crds["Gateway API and agentgateway CRDs"]
+    controller["agentgateway controller"]
+    params["AgentgatewayParameters"]
+  end
+
+  subgraph dataplane["Generated data plane"]
+    gateway["Gateway listener"]
+    envoy["Envoy data plane"]
+    routes["HTTPRoutes"]
+    policies["AgentgatewayPolicies"]
+  end
+
+  subgraph backends["Model backends"]
+    chat["Chat model Services"]
+    embedding["Embedding Service"]
+    redis["Redis and Envoy ratelimit"]
+  end
+
+  config --> kustomize --> crds
+  imageMap --> kustomize
+  crds --> controller
+  params --> controller
+  controller --> gateway
+  controller --> envoy
+  routes --> envoy
+  policies --> envoy
+  envoy --> chat
+  envoy --> embedding
+  envoy --> redis
