@@ -66,6 +66,13 @@ not listed in the repository. Keep those in an untracked
 `.secret-scan-denylist` file (one extended-regex pattern per line) or point
 `SECRET_SCAN_DENYLIST` at your own file.
 
+Because that file is untracked, a CI runner has no copy of it. A denylist rule
+with no patterns matches nothing, so the history scan would report a pass it did
+not earn. The security workflow therefore reads the patterns from the
+`SECRET_SCAN_DENYLIST` repository secret, writes them to the runner temporary
+directory, and passes that path to both scanners. The step fails when the secret
+is missing rather than continuing with an inactive rule.
+
 For gateway behavior:
 
 ```bash

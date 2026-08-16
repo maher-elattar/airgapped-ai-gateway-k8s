@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "airgap-ai-gateway-platform"
 version = "0.1.0"
-description = "air-gapped Kubernetes AI gateway platform CLI"
+description = "Air-gapped Kubernetes AI gateway platform CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"

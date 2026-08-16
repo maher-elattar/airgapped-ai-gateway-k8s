@@ -72,12 +72,35 @@ jobs:
           chmod +x "${bin_dir}/kustomize"
           echo "${bin_dir}" >> "${GITHUB_PATH}"
 
+      # The denylist holds identifiers from private environments, so it is never
+      # committed. Without it on the runner the denylist rule matches nothing and
+      # the history scan passes without checking anything. Supplying it as a
+      # repository secret keeps the identifiers out of Git while still enforcing
+      # them here. The step fails closed if the secret is not configured.
+      - name: Load private environment denylist
+        env:
+          SECRET_SCAN_DENYLIST_CONTENT: ${{ secrets.SECRET_SCAN_DENYLIST }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SECRET_SCAN_DENYLIST_CONTENT}" ]; then
+            echo "SECRET_SCAN_DENYLIST repository secret is not configured." >&2
+            echo "The denylist rule cannot run without it, so the history scan" >&2
+            echo "would report a pass it did not earn." >&2
+            exit 1
+          fi
+          printf '%s\n' "${SECRET_SCAN_DENYLIST_CONTENT}" > "${RUNNER_TEMP}/denylist"
+          echo "SECRET_SCAN_DENYLIST=${RUNNER_TEMP}/denylist" >> "${GITHUB_ENV}"
+
       - name: Full-history secret scan
         run: |
           set -euo pipefail
           gitleaks detect --source . --no-banner --redact --verbose
           scripts/secret-scan.sh --all
-          python scripts/pre_publication_scan.py --working-tree --history --max-bytes 5242880
+          python scripts/pre_publication_scan.py \
+            --working-tree \
+            --history \
+            --max-bytes 5242880 \
+            --denylist "${SECRET_SCAN_DENYLIST}"
 
       - name: Dependency audit
         run: |
