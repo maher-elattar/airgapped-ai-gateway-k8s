@@ -201,38 +201,6 @@ version-specific behaviour and is retested on upgrade.
 
 Reference: [ADR 0002](docs/adr/0002-chat-vs-embedding-backends.md).
 
-### 3.5 Policy model
-
-Every request passes through four controls before it reaches a model. Each
-control resolves one question, and each rejects with a distinct status code, so
-a failed request identifies the control that rejected it without further
-correlation. The controls are evaluated in the order below: routing selects the
-model route first, and policy is applied only once a route is matched.
-
-| Order | Control | Question resolved | Rejection signal |
-| --- | --- | --- | --- |
-| 1 | Routing | Does the host and path match a published model route? | `404` |
-| 2 | Authentication | Is the presented credential known to the platform? | `401` |
-| 3 | Authorization | Is that consumer entitled to this specific model? | `403` |
-| 4 | Rate limiting | Is the consumer within its quota for this descriptor? | `429` |
-
-![Request evaluation through routing, authentication, authorization, rate limiting, and backend dispatch](docs/assets/diagrams/rendered/policy-decision-flow.svg)
-
-The identity that these controls operate on is the **consumer**: the platform
-identity of an application or workload, not of a person. A consumer record
-carries a stable key, an allowed model list, and a rate-limit tier. The same
-`consumer_id` is used for the authorization decision, the quota descriptor, and
-the emitted metrics, which is what makes a single request traceable across all
-three without correlating identifiers between systems.
-
-Human authentication remains the responsibility of the calling application. A
-browser authenticates to an application backend, and that backend holds the
-gateway credential on the user's behalf.
-
-Reference: [docs/security-model.md](docs/security-model.md).
-
----
-
 ## 4. Supported baseline
 
 Support in this repository means a version set whose behaviour is proven by
