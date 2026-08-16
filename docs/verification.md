@@ -4,7 +4,7 @@ Verification is not the smoke test you run at the end. It is how the platform
 shows that identity, authorization, routing, rate limits, and rollback boundaries
 actually behave the way the documentation claims.
 
-![Authentication, authorization, rate-limit, and backend decision flow](assets/diagrams/rendered/policy-decision-flow.svg)
+![Request evaluation through routing, authentication, authorization, rate limiting, and backend dispatch](assets/diagrams/rendered/policy-decision-flow.svg)
 
 ## Static proof
 

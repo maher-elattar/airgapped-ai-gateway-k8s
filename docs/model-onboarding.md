@@ -7,7 +7,7 @@ like writing a special-case migration script.
 
 The maintained onboarding flow is rendered from Mermaid source:
 
-![Model onboarding with default deny](assets/diagrams/rendered/model-onboarding-default-deny.svg)
+![Six-phase default-deny model onboarding with verification gates](assets/diagrams/rendered/model-onboarding-default-deny.svg)
 
 ## Start with one model key
 

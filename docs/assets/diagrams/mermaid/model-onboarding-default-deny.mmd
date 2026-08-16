@@ -1,13 +1,40 @@
 flowchart TB
-  start["New model request"]
-  key["Choose one stable model key"]
-  service["Declare backend Service and port"]
-  route["Create one HTTPRoute for the model"]
-  policy["Attach route policy with no broad grants"]
-  deny["Existing consumers remain denied"]
-  tests["Add 401, 403, 200, route, and image tests"]
-  grant["Grant explicit consumer permission"]
-  verify["Verify allowed and denied consumers"]
-  release["Promote through bundle and deployment workflow"]
+  subgraph p1["Phase 1 — Define the model contract"]
+    key["Assign one stable model key"]
+    contract["Declare backend Service, port, and API shape"]
+    health["Verify the model Service responds directly"]
+  end
 
-  start --> key --> service --> route --> policy --> deny --> tests --> grant --> verify --> release
+  subgraph p2["Phase 2 — Publish the route under policy"]
+    route["Create one HTTPRoute for the model"]
+    policy["Attach the route policy with no grants"]
+  end
+
+  subgraph p3["Phase 3 — Prove default deny"]
+    denyCheck{"Existing consumers<br/>receive 403?"}
+  end
+
+  subgraph p4["Phase 4 — Grant entitlement explicitly"]
+    entitle["Add the model to one selected consumer"]
+    limits["Add rate-limit entries for that consumer"]
+  end
+
+  subgraph p5["Phase 5 — Prove entitlement scope"]
+    scopeCheck{"Granted consumer receives 200<br/>and unrelated consumers still 403?"}
+  end
+
+  subgraph p6["Phase 6 — Release"]
+    tests["Commit 401, 403, 200, and 429 assertions"]
+    promote["Promote through the bundle and deployment workflow"]
+  end
+
+  halt["Stop — policy attachment or entitlement is incorrect"]
+
+  key --> contract --> health --> route --> policy --> denyCheck
+  denyCheck -- "No" --> halt
+  denyCheck -- "Yes" --> entitle --> limits --> scopeCheck
+  scopeCheck -- "No" --> halt
+  scopeCheck -- "Yes" --> tests --> promote
+
+  classDef blocked fill:#fdeded,stroke:#c0392b,color:#7b241c
+  class halt blocked

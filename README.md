@@ -4,248 +4,254 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Kubernetes | agentgateway | Envoy | NVIDIA NIM | Redis | NGINX | Python | GitHub Actions |
 
-Getting a model serving traffic inside Kubernetes is usually the easy part.
+A reference implementation of a governed internal AI API platform for Kubernetes
+clusters that have no internet access. It places a policy-enforcing gateway in
+front of self-hosted inference services, gives every calling application its own
+identity and model entitlements, and delivers the whole stack through an offline
+supply chain with reviewable, reversible change control.
 
-Things get harder once there are several models, several applications that each
-need different access to them, no registry access during the maintenance window,
-and a production traffic path you are not allowed to break. A Service and an
-Ingress will move the packets, but they will not answer the questions that come
-up in every review before the change is approved:
+---
 
-- Which workload is calling the model?
-- Which models is that workload allowed to use?
-- Which route, backend, and policy handled the request?
-- Which rate limit applies before a single consumer exhausts the model?
-- Which image, chart, CRD, and wheel entered the disconnected environment?
-- What proof exists before traffic moves?
-- What can be rolled back without touching the model runtime?
+## Contents
 
-This repository is my answer to those questions as a working Kubernetes
-reference implementation. Gateway API carries the routing contract, agentgateway
-carries the AI policy layer, Envoy-style rate limiting backed by Redis handles
-the demo quota path, Kustomize holds the authored manifests, a typed Python CLI
-plans and executes changes, and a disposable kind lab proves the behavior.
+1. [Problem statement](#1-problem-statement)
+2. [Solution overview](#2-solution-overview)
+3. [Architecture](#3-architecture)
+4. [Supported baseline](#4-supported-baseline)
+5. [Operational sequence](#5-operational-sequence)
+6. [Deployment steps](#6-deployment-steps)
+7. [Verification](#7-verification)
+8. [Platform operations](#8-platform-operations)
+9. [Repository layout](#9-repository-layout)
+10. [Development workflow](#10-development-workflow)
+11. [Security](#11-security)
+12. [Architecture decisions](#12-architecture-decisions)
+13. [References](#13-references)
 
-The versions are pinned on purpose:
+---
 
-- agentgateway v1.3.1 is the delivered baseline.
-- Gateway API v1.5.0 experimental is the delivered Gateway API track.
-- agentgateway v1.4.0 stays a separate validation target until tests prove
-  hashed-key authentication, metadata propagation, authorization, rate limits,
-  observability, Gateway API changes, rollback, and documentation behavior.
+## 1. Problem statement
 
-What comes out of that is a repeatable pattern for air-gapped AI access: one
-gateway entry point, one route per model, one policy boundary per route,
-per-workload identity, offline dependencies resolved ahead of time, runtime
-secrets kept out of Git, and rollback that respects who owns the models.
+### 1.1 Operating context
 
-## The sequence
+An air-gapped environment is a network with no route to the public internet.
+Regulated sectors such as banking, government, defence, and healthcare run this
+way by policy: every container image, Helm chart, Custom Resource Definition
+(CRD), and software dependency must be reviewed and imported deliberately before
+a workload can use it.
 
-Treat this repository as a sequence rather than a pile of YAML. The local lab
-and the production reference both follow the same path: prepare the dependency
-set, render the source of truth, plan the change, apply only the approved plan,
-verify the internal gateway path, cut over traffic, keep rollback ready.
+Organisations in these sectors increasingly self-host large language models
+rather than call an external API, because prompts and responses cannot leave the
+network. NVIDIA NIM is one common way to do this — it packages a model behind an
+OpenAI-compatible HTTP interface, so applications call familiar endpoints such as
+`/v1/chat/completions` and `/v1/embeddings` against a service running inside the
+cluster.
 
-![Discover, apply, verify, cutover, and rollback sequence](docs/assets/diagrams/rendered/deployment-sequence.svg)
+### 1.2 What breaks at scale
 
-Start with the local proof path:
+A single model serving a single application needs no platform layer. A Kubernetes
+Service and an Ingress are sufficient. The architecture stops holding once the
+environment contains several models and several consuming applications, because
+the following questions have no owner:
 
-```bash
-python -m pip install -c constraints.txt -r requirements-dev.txt -e .
-make airgap-demo
-make render
-make validate
-make kind-test
-```
+| Question | Consequence when unanswered |
+| --- | --- |
+| Which application issued this request? | No attribution, no usage accounting, no audit trail |
+| Which models may that application call? | Any workload with network reach can call any model |
+| How is access revoked for one application? | Revocation requires changing the model deployment itself |
+| What limits one consumer's throughput? | A single caller can exhaust GPU capacity for everyone |
+| Which route, policy, and backend served the request? | Incidents are debugged by inspecting several layers at once |
+| How does any of this get installed offline? | Installation depends on registries the cluster cannot reach |
 
-The same command family drives an environment-specific rollout:
+Answering these inside each model deployment does not scale. Every new model
+would reimplement authentication, entitlement, quota, and telemetry, and each
+implementation would drift from the others.
 
-```bash
-airgap-ai-gateway --config examples/config discover
+### 1.3 Derived requirements
 
-airgap-ai-gateway --config examples/config deploy plan \
-  --overlay retained-nginx-edge \
-  --apply-mode server-side-dry-run \
-  --output-dir runs/plans/deploy
+The platform therefore has to provide:
 
-airgap-ai-gateway --config examples/config deploy apply \
-  --expected-context kind-airgap-ai-gateway \
-  --apply-mode server-side-dry-run \
-  --confirm I_UNDERSTAND_DISPOSABLE_CONTEXT_ONLY \
-  --plan-file runs/plans/deploy/plan.json \
-  --snapshot-file runs/snapshots/pre-change.json \
-  --commands-log runs/reports/deploy/commands.log
-```
+- **Identity** — a stable, per-workload credential resolved to a named consumer.
+- **Authorization** — per-model entitlement, denied by default.
+- **Quota** — throughput limits attributed to the consumer, not the source IP.
+- **Observability** — consistent identity across policy decisions and metrics.
+- **Offline delivery** — every dependency resolved, verified, and imported before
+  installation begins.
+- **Controlled change** — planned, gated, verifiable, and reversible operations
+  against production traffic.
 
-That shape is not accidental. Planning stays offline and reviewable. Applying is
-gated. Verification is a separate step. Cutover is separate again. Rollback reads
-the state ledger instead of guessing which resources are safe to delete.
+---
 
-## What this solution provides
+## 2. Solution overview
 
-| Capability | Implementation | Primary reference |
-| --- | --- | --- |
-| Gateway contract | One Gateway with one HTTPRoute per model-facing API | [Architecture contract](docs/architecture.md) |
-| AI policy | Route-scoped authentication, authorization, rate-limit metadata, and metrics | [Security model](docs/security-model.md) |
-| Chat models | OpenAI-compatible chat routes through `AgentgatewayBackend` | [Model onboarding](docs/model-onboarding.md) |
-| Embeddings | OpenAI-compatible embedding route through a Kubernetes Service backend in the tested baseline | [ADR 0002](docs/adr/0002-chat-vs-embedding-backends.md) |
-| Application identity | One stable consumer identity per workload | [Consumer lifecycle](docs/consumer-lifecycle.md) |
-| Declarative manifests | Kustomize bases and overlays for demo, retained-edge, and production-reference paths | [Manifest source](manifests/baseline-v1.3.1) |
-| Air-gap supply chain | Immutable source lock, bundle build, offline verify, registry promotion, and rendered-manifest proof | [Air-gap bundle workflow](docs/airgap-bundle.md) |
-| Safe operations | Deterministic plans, pre-change snapshots, state ledger, redacted reports, and gated apply | [Deployment](docs/deployment.md) |
-| Runtime proof | Disposable kind cluster, local registry, mock OpenAI-compatible Services, and request matrix | [Disposable gateway lab](docs/kind-e2e-lab.md) |
-| Recovery | State-aware rollback and decommission order | [Rollback guide](docs/rollback.md) |
+### 2.1 What the platform delivers
 
-## The traffic path
+The solution introduces one gateway as the single entry point for internal model
+traffic. Applications no longer address model services directly. They present a
+credential to the gateway, which resolves it to a consumer identity, checks that
+consumer's entitlement for the requested model, applies the relevant rate limit,
+records telemetry, and only then forwards the request to the model service.
 
-The first decision is not the controller, the chart, or the manifest layout. It
-is the traffic contract.
+Around that runtime behaviour, the repository provides the delivery and
+operational machinery: declarative manifests as the source of truth, an offline
+dependency bundle with checksum verification, a command-line tool that plans
+changes before applying them, a disposable test cluster that proves policy
+behaviour, and rollback driven by recorded resource ownership.
 
-Before the gateway exists, applications call model Services directly or through
-whatever edge is already in place. That works for one model and one caller. It
-starts to hurt when every application needs different model access, different
-limits, and different evidence during an incident, because the model runtime
-ends up carrying responsibilities that belong at the platform boundary.
+### 2.2 Design principles
 
-After the gateway, applications keep one stable entry point, and identity, route
-selection, entitlement, quota, and observability are enforced in one place. The
-model Service goes back to doing what it is good at, which is inference. It does
-not become an authorization system, a rate-limit system, or a cutover mechanism.
+| Principle | Rationale |
+| --- | --- |
+| One gateway, one route per model | Keeps the relationship between a model and its policy direct and auditable |
+| Default deny on model onboarding | Adding a model never widens an existing consumer's access |
+| Application identity, not human identity | The gateway authenticates workloads; user sessions remain the application's concern |
+| Separate installation from cutover | The gateway is proven internally before production traffic moves |
+| Declarative source of truth | Runtime objects are inspected for health; durable change happens in authored inputs |
+| Ownership-aware rollback | Recovery removes only what a run created and never the model workloads |
+| Pinned, tested version sets | Support is defined by passing tests, not by a compatibility claim in prose |
+
+---
+
+## 3. Architecture
+
+### 3.1 Component inventory
+
+The platform composes upstream projects rather than replacing them. Each
+component owns one concern:
+
+| Component | Role in the solution |
+| --- | --- |
+| **Kubernetes Gateway API** | The routing contract. Successor to Ingress, splitting responsibilities across `GatewayClass` (which controller implements it), `Gateway` (the listener), and `HTTPRoute` (host and path rules) |
+| **agentgateway** | The AI policy layer. Adds custom resources for consumer authentication, per-model authorization, AI backend behaviour, rate-limit policy, and telemetry attributes |
+| **Envoy** | The proxy technology underneath the gateway data plane that carries model traffic |
+| **NVIDIA NIM** | The model runtime. Serves OpenAI-compatible chat and embedding APIs; owned by the model platform, not by this gateway |
+| **Envoy ratelimit + Redis** | The quota service and its counter store, evaluating rate-limit descriptors emitted by gateway policy |
+| **NGINX** | Optional retained edge. Where one already terminates public DNS and TLS, it is kept and repointed rather than replaced |
+| **Kustomize manifests** | The declarative source of truth, organised as bases plus environment overlays |
+| **Python CLI** | Discovery, rendering, planning, gated apply, verification, rollback, and offline bundle handling |
+| **kind lab** | A disposable local cluster that proves policy behaviour with mock model services |
+
+### 3.2 Request path
+
+Before the gateway is introduced, applications reach model services directly or
+through whatever edge already exists. Afterwards, applications keep one stable
+entry point and the platform enforces identity, routing, entitlement, quota, and
+telemetry in a single place. The model service returns to serving inference only.
 
 ![Opening architecture showing retained edge and gateway-controlled model access](docs/assets/diagrams/article/01-opening-architecture.png)
 
-The same idea appears below as a repository-authored Mermaid diagram. The
-article-style image tells the architecture story; the Mermaid version is the one
-to edit when the documentation changes.
+The same transition, as a maintained diagram source:
 
 ![Before and after traffic architecture](docs/assets/diagrams/rendered/before-after-traffic-architecture.svg)
 
-Where an NGINX edge is already in the path, it can keep owning DNS, TLS, and the
-external entry point. The gateway goes in behind it and gets tested before the
-edge forwards anything real. In a greenfield environment the gateway can be the
-direct north-south exposure point, but only once load balancer, firewall, DNS,
-TLS, and rollback ownership have been designed rather than assumed.
+Two exposure patterns are supported, and the choice does not change the internal
+design:
 
-Both paths land on the same internal contract:
+| Pattern | External entry point | When it applies |
+| --- | --- | --- |
+| Retained edge | Existing NGINX keeps DNS, TLS, and public routing; forwards to the internal gateway Service | Brownfield environments with a working production edge |
+| Direct exposure | The gateway data plane is published through an approved load balancer or ingress path | Greenfield environments, once DNS, TLS, firewall, and rollback ownership are designed |
 
-- Gateway API owns listener and HTTPRoute behavior.
-- agentgateway owns AI-specific policy.
-- The controller reconciles the declared state.
-- The data plane serves the request path.
-- Model Services stay focused on inference.
+Both converge on the same internal contract: Gateway API owns listener and route
+behaviour, agentgateway owns AI policy, the controller reconciles declared state,
+the data plane serves requests, and model services stay focused on inference.
 
 Reference: [docs/architecture.md](docs/architecture.md).
 
-## Run the gateway as the policy boundary
+### 3.3 Control plane and data plane
 
-The gateway should own the decisions every model-facing request needs and that
-no individual model should have to reimplement.
-
-It owns authentication at the application boundary. A workload presents a runtime
-credential, and the gateway maps it to a stable consumer identity. That identity
-is not a person. It is the platform identity of an application or workload. Human
-login stays with the application backend unless someone designs and tests a
-separate user-delegation model.
-
-It owns authorization at the model boundary. A valid key does not mean access to
-every model. Each model route carries its own policy, so the same workload can
-get `200` on one model and `403` on another. That is the design working, not a
-bug report.
-
-It owns rate-limit descriptors and observability metadata. The `consumer_id` that
-drives authorization is the same one that shows up in quota decisions and in
-metrics, which is what makes troubleshooting follow a straight line instead of a
-guess.
-
-It does not own the model lifecycle. NVIDIA NIM Services keep responsibility for
-model images, readiness, GPU scheduling, scaling, and model-specific behavior.
-The gateway checks that a backend is healthy before publishing a route to it, but
-it should never hide a broken model behind new routing.
-
-![Authentication, authorization, rate-limit, and backend decision flow](docs/assets/diagrams/rendered/policy-decision-flow.svg)
-
-That ownership boundary is also why runtime proxy objects stay separate from the
-authored source here. Generated proxy resources are for inspection during
-verification. Lasting changes go through configuration, manifests, policies,
-overlays, and tests.
-
-References:
-
-- [Architecture contract](docs/architecture.md)
-- [Security model](docs/security-model.md)
-- [ADR 0001: One Gateway, separate model routes](docs/adr/0001-one-gateway-separate-model-routes.md)
-
-## Inspect control plane and data plane separately
-
-The controller is not the gateway carrying model traffic.
-
-The controller watches Gateway API and agentgateway resources, validates the
-desired state, and reconciles the runtime proxy objects. The generated data plane
-is what actually handles HTTP requests. Treating the two as one thing makes
-troubleshooting much harder than it needs to be.
-
-If the Gateway is not programmed, the questions are about CRDs, the controller,
-GatewayClass, parameters, and reconciliation. If the Gateway is programmed and
-requests still fail, the questions move to Host matching, route attachment,
-policy attachment, rate-limit state, backend resolution, and model health.
+agentgateway runs as two distinct workloads, and separating them is essential for
+diagnosis. The **controller** watches Kubernetes resources and reconciles desired
+state; it does not carry model traffic. The **data plane** is the proxy the
+controller generates from a `Gateway` resource, and it is what actually serves
+requests.
 
 ![Control plane and data plane separation](docs/assets/diagrams/article/03-control-plane-data-plane.png)
 
-The editable version below keeps the same distinction and is easier to evolve as
-the repository changes.
-
 ![Mermaid control plane and data plane flow](docs/assets/diagrams/rendered/control-plane-data-plane.svg)
 
-That split drives the CLI and manifest design:
+The distinction determines where an investigation starts:
 
-- `discover` is read-only and reports current state.
-- `render` works offline and produces deterministic output.
-- `deploy plan` produces a JSON plan and a Markdown summary.
-- `deploy apply` executes only the actions in an approved plan.
-- `verify` checks conditions and request behavior.
-- `rollback apply` restores or removes resources based on the state ledger.
+| Symptom | Layer to investigate first |
+| --- | --- |
+| `Gateway` never reaches `Programmed=True` | CRDs, controller readiness, `GatewayClass`, parameters, reconciliation |
+| `Gateway` is programmed but requests fail | Host matching, route attachment, policy attachment, rate-limit state, backend resolution, model health |
 
-Create the deploy plan before any cluster-changing step:
+Because the data plane is generated, it is treated as output. Editing the
+generated Deployment directly creates drift that reconciliation may overwrite;
+durable changes belong in the authored manifests and configuration.
 
-```bash
-airgap-ai-gateway --config examples/config deploy plan \
-  --overlay retained-nginx-edge \
-  --apply-mode server-side-dry-run \
-  --output-dir runs/plans/deploy
-```
+### 3.4 Chat and embedding backends
 
-This is also why `kubectl patch`, `kubectl set image`, and live edits are not the
-operating model. They are fine while you are investigating an incident at 2 a.m.
-They are not the source of truth for the platform.
+Chat completions and embeddings are both OpenAI-compatible, but they are not
+interchangeable request shapes. A chat request carries a `messages[]` array; an
+embedding request carries `input`. In the tested baseline they therefore use
+different backend representations:
 
-Reference: [docs/architecture.md](docs/architecture.md).
+![Chat versus embedding backend](docs/assets/diagrams/article/04-chat-vs-embedding-backend.png)
 
-## Verify the supported baseline
+| API | Backend representation |
+| --- | --- |
+| `/v1/chat/completions` | `AgentgatewayBackend` configured as an OpenAI-compatible AI provider |
+| `/v1/embeddings` | Kubernetes Service backend, routed through the gateway |
 
-Version discipline is part of the design.
+The embedding route still receives authentication, authorization, rate limiting,
+and telemetry. Only the final backend representation differs. This is
+version-specific behaviour and is retested on upgrade.
 
-The baseline is agentgateway v1.3.1 with Gateway API v1.5.0 experimental. That is
-not a claim that newer upstream versions are worse. It is a claim about what has
-been proven here, because support is not a sentence in a README. Support is the
-set of manifests, configuration, behaviors, and tests that show the version does
-what the documentation says it does.
+Reference: [ADR 0002](docs/adr/0002-chat-vs-embedding-backends.md).
 
-The v1.4.0 track matters because it advertises security-relevant behavior such as
-hashed-key support. That is worth validating, and it is exactly why it should not
-quietly replace the baseline until the full path holds:
+### 3.5 Policy model
 
-- hashed-key authentication works for the intended routes;
-- metadata still drives authorization, rate limits, and observability;
-- Gateway API version changes are handled cleanly;
-- rollback still works;
-- docs and examples no longer imply raw-key runtime storage.
+Every request passes through four controls before it reaches a model. Each
+control resolves one question, and each rejects with a distinct status code, so
+a failed request identifies the control that rejected it without further
+correlation. The controls are evaluated in the order below: routing selects the
+model route first, and policy is applied only once a route is matched.
 
-Until that is true, v1.4.0 is a validation target and nothing more.
+| Order | Control | Question resolved | Rejection signal |
+| --- | --- | --- | --- |
+| 1 | Routing | Does the host and path match a published model route? | `404` |
+| 2 | Authentication | Is the presented credential known to the platform? | `401` |
+| 3 | Authorization | Is that consumer entitled to this specific model? | `403` |
+| 4 | Rate limiting | Is the consumer within its quota for this descriptor? | `429` |
 
-The compatibility matrix records the delivered version, supported API, status,
-evidence, and upgrade risk per component: agentgateway, Gateway API, chat routes,
-embedding routes, the retained NGINX edge, greenfield exposure, generated
-data-plane resources, Redis, Envoy ratelimit, Kubernetes, and Helm chart inputs.
+![Request evaluation through routing, authentication, authorization, rate limiting, and backend dispatch](docs/assets/diagrams/rendered/policy-decision-flow.svg)
+
+The identity that these controls operate on is the **consumer**: the platform
+identity of an application or workload, not of a person. A consumer record
+carries a stable key, an allowed model list, and a rate-limit tier. The same
+`consumer_id` is used for the authorization decision, the quota descriptor, and
+the emitted metrics, which is what makes a single request traceable across all
+three without correlating identifiers between systems.
+
+Human authentication remains the responsibility of the calling application. A
+browser authenticates to an application backend, and that backend holds the
+gateway credential on the user's behalf.
+
+Reference: [docs/security-model.md](docs/security-model.md).
+
+---
+
+## 4. Supported baseline
+
+Support in this repository means a version set whose behaviour is proven by
+manifests, configuration, and passing tests — not a compatibility claim in
+documentation. The delivered baseline is:
+
+| Component | Version | Status |
+| --- | --- | --- |
+| agentgateway | v1.3.1 | Delivered baseline |
+| Gateway API | v1.5.0 experimental | Delivered baseline |
+| agentgateway | v1.4.0 | Validation target, not supported |
+
+agentgateway v1.4.0 advertises security-relevant behaviour, notably API keys
+stored as SHA-256 hashes rather than raw values. That is a desirable improvement,
+so it is tracked deliberately rather than adopted silently. It becomes the
+baseline once tests prove hashed-key authentication on the intended routes,
+continued metadata propagation into authorization and quota and telemetry, clean
+handling of the Gateway API version change, reliable rollback, and documentation
+that no longer implies raw-key storage.
 
 Run the baseline checks from source:
 
@@ -258,124 +264,75 @@ airgap-ai-gateway --config examples/config verify \
   --registry registry.example.internal:5000
 ```
 
-Reference: [docs/compatibility.md](docs/compatibility.md).
+The full matrix — delivered version, supported API, status, evidence, and upgrade
+risk for every component — is in [docs/compatibility.md](docs/compatibility.md).
 
-## Render the Kubernetes manifests
+---
 
-The Kubernetes source of truth lives under
-[manifests/baseline-v1.3.1](manifests/baseline-v1.3.1).
+## 5. Operational sequence
 
-The structure is boring: bases describe the platform objects, overlays describe
-the environment shape. Boring is the point. It means the route, policy, backend,
-image map, NetworkPolicy, ServiceAccount, and availability assumptions can all be
-read and argued about before anything renders.
+The platform is operated as an ordered sequence rather than a set of manifests
+applied at once. The same sequence is used by the local lab and by an
+environment-specific rollout. Read-only and offline stages carry no risk to the
+cluster; mutating stages are gated; rollback is a first-class stage rather than
+an improvised recovery.
 
-The baseline includes:
+![Discover, plan, apply, verify, cut over, and roll back sequence](docs/assets/diagrams/rendered/deployment-sequence.svg)
 
-- an agentgateway namespace and configuration inputs;
-- `AgentgatewayParameters` and `Gateway`;
-- chat backend definitions;
-- embedding Service backend routes;
-- one HTTPRoute per model;
-- one authorization policy per model route;
-- gateway-level consumer metrics;
-- Redis and Envoy ratelimit demo resources;
-- owned Services, ConfigMaps, PDBs, NetworkPolicies, ServiceAccounts, security
-  contexts, resource requests, and topology constraints.
-
-The overlays are split by purpose:
-
-| Overlay | Purpose | Notes |
+| Stage | Purpose | Cluster impact |
 | --- | --- | --- |
-| `kind-demo` | Small static demo render | Single replica and demo-only labels |
-| `kind-e2e-lab` | Disposable behavioral proof | Adds mock model Services and local-registry images |
-| `retained-nginx-edge` | Brownfield edge migration | Keeps edge cutover separate from gateway install |
-| `production-reference` | Production-oriented shape | Makes HA and persistence decisions explicit |
+| 1. Discover | Read the current model, route, and edge state | None — read-only |
+| 2. Plan | Render the overlay and produce a reviewable plan | None — offline |
+| 3. Apply | Execute only the approved plan, after snapshotting | Installs the gateway; production traffic unchanged |
+| 4. Verify | Prove conditions and the request matrix internally | None — reads and test requests |
+| 5. Cut over | Repoint the edge to the gateway Service | Changes the production request path |
+| 6. Roll back | Restore the previous path, then remove owned resources | Recovery only |
 
-The production reference does not pretend that one Redis Pod is highly available.
-It points at the external HA Redis contract you need once rate-limit state
-matters beyond a local demo.
+The separation between stages 3 and 5 is the central operational decision. If the
+gateway fails its internal tests, production traffic never moves. If the cutover
+fails after those tests passed, the fault is isolated to the edge layer, and the
+first recovery action is to restore the previous edge backend rather than to
+uninstall the gateway.
 
-Validation rejects public registry references, mutable production tags,
-unprotected routes, ambiguous Service ports, missing route policies,
-cross-namespace references without explicit trust, and rendered Secret data.
+---
 
-Render and validate the authored overlays:
+## 6. Deployment steps
 
-```bash
-make render
-make validate
-python scripts/validate_manifests.py
-```
+### 6.1 Local proof path
 
-For a production-reference render, the proof is not that YAML appeared. The proof
-is that routes are protected, images resolve through the internal registry map,
-tags are immutable, and a normal render contains no Secret values.
-
-Reference: [manifests/README.md](manifests/README.md).
-
-## Run the disposable gateway lab
-
-A gateway project needs a real behavioral test, not only rendered YAML.
-
-The disposable lab builds a uniquely named kind cluster and a local registry,
-then brings up repository-owned OpenAI-compatible mock Services for Qwen chat,
-Gemma chat, and embeddings. The embedding mock returns a deterministic non-empty
-vector, so a `200` on the embedding route proves an actual embedding response
-rather than any successful HTTP response.
-
-![Direct internal test path](docs/assets/diagrams/article/11-direct-internal-test-path.png)
-
-From there the lab installs the pinned Gateway API and agentgateway compatibility
-set, deploys the three-model demo overlay, creates runtime-only fake credentials
-outside tracked paths, and sends requests through the internal gateway before any
-retained-edge path is involved.
+The fastest way to evaluate the solution is the disposable local lab, which
+requires no GPUs, no model weights, and no NVIDIA images:
 
 ```bash
 python -m pip install -c constraints.txt -r requirements-dev.txt -e .
+make airgap-demo
+make render
+make validate
 make kind-test
 ```
 
-Optional retained-edge pass:
+This builds and verifies an offline bundle, renders the manifests, validates
+them, then creates a temporary kind cluster with mock OpenAI-compatible model
+services and runs the full policy matrix against it.
 
-```bash
-python scripts/kind_e2e_lab.py run --with-nginx
-```
+### 6.2 Prepare the offline bundle
 
-The lab writes JUnit, JSON, and Markdown evidence. It verifies the exact kind
-context before every `kubectl` call and tears down only the uniquely named
-cluster it created.
-
-Reference: [docs/kind-e2e-lab.md](docs/kind-e2e-lab.md).
-
-## Build and verify the air-gap bundle
-
-In an air-gapped cluster, dependency management is not an afterthought. It is
-part of the architecture.
-
-The dependency set covers Gateway API CRDs, agentgateway CRD and controller
-charts, the controller image, the data-plane image, Redis, the Envoy ratelimit
-image, CLI wheels, required tools, and the fixture images the lab needs. Every
-entry is pinned in [airgap/sources.lock.yaml](airgap/sources.lock.yaml) with its
-version, canonical source, destination name, checksum or OCI digest, provenance
-note, license note, and compatibility-set membership.
+In a disconnected environment, dependency resolution happens before installation
+rather than during it. The dependency set covers Gateway API CRDs, agentgateway
+CRD and controller charts, controller and data-plane images, Redis, the Envoy
+ratelimit image, Python wheels, and required tooling.
 
 ![Air-gap dependency graph](docs/assets/diagrams/article/05-airgap-dependency-graph.png)
 
-The workflow has two sides. On the connected side the bundle is assembled and
-checked. On the disconnected side the same bundle is verified without a single
-network request, promoted into an internal registry, and matched against the
-rendered manifests.
+Every entry is pinned in [airgap/sources.lock.yaml](airgap/sources.lock.yaml)
+with its version, canonical source, destination name, checksum or OCI digest,
+provenance note, license note, and compatibility-set membership.
+
+The workflow is two-sided: the bundle is assembled and checked on the connected
+side, then verified with no network access on the disconnected side, promoted
+into an internal registry, and matched against the rendered manifests.
 
 ![Connected-side to offline-side supply chain](docs/assets/diagrams/rendered/airgap-supply-chain.svg)
-
-Run the local demonstration:
-
-```bash
-make airgap-demo
-```
-
-Or run the pieces separately when reviewing the supply chain:
 
 ```bash
 airgap-ai-gateway bundle build \
@@ -397,27 +354,53 @@ airgap-ai-gateway --config examples/config registry promote \
   --output-file dist/airgap-demo/promotion-plan.json
 ```
 
-The workflow prefers OCI-native tooling such as `skopeo` and OCI archives where
-that is available, with a documented Docker fallback for environments that do not
-have the OCI path. For multi-node clusters the strategy is an internal registry
-every node can reach, not loading images onto one node and hoping the scheduler
-stays put.
+Images are promoted to an internal registry reachable by every cluster node.
+Loading images onto individual nodes is not a supported strategy, because the
+first reschedule onto another node will fail to pull.
 
 Reference: [docs/airgap-bundle.md](docs/airgap-bundle.md).
 
-## Plan, apply, verify, then cut over
+### 6.3 Render and validate the manifests
 
-Deployment and cutover are separate operations.
+The Kubernetes source of truth is a Kustomize tree under
+[manifests/baseline-v1.3.1](manifests/baseline-v1.3.1): bases describe the
+platform objects, and overlays describe environment shape.
 
-Installation prepares the gateway. Cutover changes the request path. Keeping them
-apart is what keeps the production window small. If the gateway cannot pass its
-internal tests, the edge never moves at all. If the edge cutover fails after the
-internal tests passed, the first rollback action is to restore the previous edge
-path, not to start uninstalling the gateway.
+```bash
+make render
+make validate
+python scripts/validate_manifests.py
+```
 
-![Cutover path through the retained edge](docs/assets/diagrams/article/13-cutover-path.png)
+| Overlay | Purpose |
+| --- | --- |
+| `kind-demo` | Small static demo render, single replica |
+| `kind-e2e-lab` | Disposable behavioural proof with mock model Services |
+| `retained-nginx-edge` | Brownfield migration keeping the existing edge |
+| `production-reference` | Production-oriented shape with explicit HA and persistence decisions |
 
-The CLI makes that separation explicit:
+Validation rejects public registry references, mutable production tags,
+unprotected routes, ambiguous Service ports, missing route policies,
+cross-namespace references without explicit trust, and rendered Secret data. The
+production reference does not represent a single Redis Pod as highly available;
+it points to an external HA Redis contract instead.
+
+Reference: [manifests/README.md](manifests/README.md).
+
+### 6.4 Discover the target environment
+
+Discovery is read-only. It reports the observed model services, routes, and edge
+state, and identifies any ambiguity an operator must resolve explicitly rather
+than letting automation choose.
+
+```bash
+airgap-ai-gateway --config examples/config discover
+```
+
+### 6.5 Plan the change
+
+Planning is offline and produces two artefacts for review: `plan.json` as the
+deterministic contract the executor follows, and `plan.md` as the human summary.
 
 ```bash
 airgap-ai-gateway --config examples/config deploy plan \
@@ -426,13 +409,14 @@ airgap-ai-gateway --config examples/config deploy plan \
   --output-dir runs/plans/deploy
 ```
 
-The plan comes out as two artifacts:
+If the plan does not describe the intended change, the correction belongs in the
+source, not in a manual adjustment after applying.
 
-- `plan.json`, the deterministic executor contract;
-- `plan.md`, the human summary.
+### 6.6 Apply the approved plan
 
-State-changing operations require the exact expected context, an apply mode, a
-confirmation token, the approved plan, and a saved pre-change snapshot.
+Every state-changing operation requires the exact expected cluster context, an
+apply mode matching the reviewed plan, a confirmation token, the approved plan
+file, and a saved pre-change snapshot. A context mismatch fails closed.
 
 ```bash
 airgap-ai-gateway --config examples/config deploy apply \
@@ -444,7 +428,22 @@ airgap-ai-gateway --config examples/config deploy apply \
   --commands-log runs/reports/deploy/commands.log
 ```
 
-Once the internal gateway path passes, cutover is planned and applied on its own:
+Reference: [docs/deployment.md](docs/deployment.md).
+
+### 6.7 Verify the internal path
+
+The gateway is tested through its internal Service before any production traffic
+is involved, which removes DNS, TLS, external load balancers, and legacy ingress
+behaviour from the diagnosis.
+
+![Direct internal test path](docs/assets/diagrams/article/11-direct-internal-test-path.png)
+
+### 6.8 Cut over the edge
+
+Cutover is planned and applied as a separate operation. With a retained edge,
+DNS and TLS do not move; only the edge backend changes.
+
+![Cutover path through the retained edge](docs/assets/diagrams/article/13-cutover-path.png)
 
 ```bash
 airgap-ai-gateway --config examples/config cutover plan \
@@ -461,45 +460,49 @@ airgap-ai-gateway --config examples/config cutover apply \
   --commands-log runs/reports/cutover/commands.log
 ```
 
-References:
+Reference: [ADR 0003](docs/adr/0003-staged-cutover-and-rollback.md).
 
-- [Deployment guide](docs/deployment.md)
-- [ADR 0003: Staged cutover and rollback](docs/adr/0003-staged-cutover-and-rollback.md)
+---
 
-## Verify the request matrix
+## 7. Verification
 
-Ready Pods prove almost nothing here.
+### 7.1 Why failures are part of the proof
 
-The gateway is a policy boundary, so the proof has to include the failures. A
-protected system needs to show that the wrong request fails for the right reason
-just as clearly as it shows that the allowed request succeeds.
+A gateway is a policy boundary, so readiness probes and successful requests are
+insufficient evidence. The platform must demonstrate that unauthorised requests
+fail for the correct reason as reliably as it demonstrates that authorised
+requests succeed.
 
 ![Policy test matrix](docs/assets/diagrams/article/12-policy-test-matrix.png)
 
 | Request | Expected signal | What it proves |
 | --- | --- | --- |
 | No API key | 401 | Anonymous access is closed |
-| Unknown API key | 401 | Only known runtime credentials work |
+| Unknown API key | 401 | Only known runtime credentials are accepted |
 | Qwen consumer with Qwen grant | 200 | Chat route, backend, and policy align |
 | Valid consumer without Qwen grant | 403 | Entitlement is route-specific |
 | Gemma consumer with Gemma grant | 200 | The second chat route is independent |
-| Embedding consumer with embedding grant | 200 with vector length greater than zero | Embedding response shape is validated |
-| Valid consumer without embedding grant | 403 | Embedding access is not broad |
-| Dedicated low-limit consumer under repeated traffic | 429 | Descriptor and counter path are active |
-| Wrong Host header | 404 | Host and route matching protect the boundary |
-| Broken backend route | Diagnostic condition or expected upstream failure | Backend errors stay visible |
+| Embedding consumer with embedding grant | 200 with vector length greater than zero | The embedding response shape is validated |
+| Valid consumer without embedding grant | 403 | Embedding access is not granted broadly |
+| Low-limit consumer under repeated traffic | 429 | Descriptor and counter path are active |
+| Wrong Host header | 404 | Host and route matching bound the surface |
+| Broken backend route | Diagnostic condition or expected upstream failure | Backend errors remain visible |
 | Gateway cleanup | Model Services remain present | Gateway lifecycle is separate from model lifecycle |
 
-Runtime verification also polls bounded Kubernetes conditions:
+The embedding assertion checks vector length rather than status code alone, so a
+`200` proves an actual embedding response instead of any successful HTTP reply.
 
-- Gateway `Programmed=True`;
-- HTTPRoute `Accepted=True`;
-- HTTPRoute `ResolvedRefs=True`;
-- AgentgatewayPolicy `Accepted=True`;
-- AgentgatewayPolicy `Attached=True`;
-- Deployment rollout readiness.
+### 7.2 Resource conditions
 
-Run the static and runtime proof:
+Runtime verification also polls bounded Kubernetes conditions, because a resource
+existing is not the same as a resource working:
+
+- `Gateway` — `Programmed=True`
+- `HTTPRoute` — `Accepted=True` and `ResolvedRefs=True`
+- `AgentgatewayPolicy` — `Accepted=True` and `Attached=True`
+- `Deployment` — observed generation and available replicas match the request
+
+### 7.3 Running the proof
 
 ```bash
 make lint
@@ -508,96 +511,77 @@ make validate
 make kind-test
 ```
 
-Reference: [docs/verification.md](docs/verification.md).
+The lab creates a uniquely named cluster and registry, tears down only what it
+created, and writes JUnit, JSON, and Markdown evidence.
 
-## Add a model with default deny
+References: [docs/verification.md](docs/verification.md),
+[docs/kind-e2e-lab.md](docs/kind-e2e-lab.md).
 
-Adding a model should feel like adding a platform capability, not like writing a
-one-off migration.
+---
 
-The model key is the anchor. It drives the route name, backend name, policy name,
-permission field, labels, tests, and report fields. Get the key right and the
-rest of the platform stays readable.
+## 8. Platform operations
+
+### 8.1 Onboarding a model
+
+Adding a model is a routine platform operation rather than a bespoke migration.
+Each model is identified by a stable model key, which propagates to the route
+name, backend name, policy name, permission field, labels, tests, and report
+fields.
 
 ![Model resource naming](docs/assets/diagrams/article/14-model-resource-naming.png)
 
-In the tested baseline, chat and embedding backends are handled differently on
-purpose:
+Onboarding is default-deny. Publishing a model route grants no access to any
+existing consumer; entitlement is added afterwards, to one named consumer at a
+time. The procedure is therefore structured as six phases separated by two
+verification gates, and a failed gate stops the onboarding rather than
+downgrading it to a warning. The first gate proves that the route is genuinely
+closed before any entitlement exists; the second proves that the entitlement
+granted reaches exactly one consumer and no others.
 
-- OpenAI-compatible chat models use `AgentgatewayBackend`.
-- OpenAI-compatible embeddings route through the gateway to a Kubernetes Service
-  backend.
+![Six-phase default-deny model onboarding with verification gates](docs/assets/diagrams/rendered/model-onboarding-default-deny.svg)
 
-![Chat versus embedding backend](docs/assets/diagrams/article/04-chat-vs-embedding-backend.png)
+| Phase | Action | Exit condition |
+| --- | --- | --- |
+| 1. Define the contract | Assign the model key; declare backend Service, port, and API shape; confirm the model Service responds directly | Model answers on its own endpoint |
+| 2. Publish under policy | Create the `HTTPRoute` and attach its route policy with no grants | Route exists and the policy reports `Attached=True` |
+| 3. Prove default deny | Issue requests as existing consumers | **Gate:** every existing consumer receives `403` |
+| 4. Grant entitlement | Add the model to one selected consumer; add its rate-limit entries | Consumer record and quota descriptor updated |
+| 5. Prove entitlement scope | Re-issue requests as the granted consumer and as unrelated consumers | **Gate:** granted consumer receives `200`, unrelated consumers still `403` |
+| 6. Release | Commit the `401`, `403`, `200`, and `429` assertions; promote through the bundle and deployment workflow | Behaviour is enforced by the test suite |
 
-Every new model starts denied for existing consumers. The onboarding path is:
-
-1. verify the model Service directly;
-2. add the backend representation;
-3. add the HTTPRoute;
-4. attach the route policy;
-5. verify existing consumers receive `403`;
-6. grant one selected consumer;
-7. verify that consumer receives `200`;
-8. verify unrelated consumers still receive `403`;
-9. add rate-limit entries explicitly;
-10. keep the proof in the test suite.
-
-![Model onboarding with default deny](docs/assets/diagrams/rendered/model-onboarding-default-deny.svg)
-
-Preview the generated chat-model onboarding shape from an existing example model:
+A failure at either gate indicates that the policy is not attached to the
+intended route, or that entitlement was applied more broadly than intended.
+Neither condition should be resolved by granting access more widely.
 
 ```bash
 airgap-ai-gateway --config examples/config model add --model-key qwen-chat
 ```
 
-For a new model, add the model contract to configuration, add or render the
-route/backend/policy source, and rerun validation before granting any consumer.
+Reference: [docs/model-onboarding.md](docs/model-onboarding.md).
 
-References:
+### 8.2 Consumer lifecycle
 
-- [Model onboarding guide](docs/model-onboarding.md)
-- [ADR 0002: Chat vs embedding backends](docs/adr/0002-chat-vs-embedding-backends.md)
-
-## Add, rotate, and revoke consumers
-
-A consumer is a workload identity.
-
-That sounds like a small definition, but it is the difference between a gateway
-you can operate and a gateway that only forwards traffic. The consumer identity
-is what ties together authorization, rate limits, metrics, rotation, disablement,
-revocation, and troubleshooting.
+A consumer record represents one calling workload. Its credential value is never
+repository content; it is held in the environment's runtime secret system, and
+the repository defines only the Secret names, labels, and metadata schema.
 
 ![API key metadata becoming gateway consumer identity](docs/assets/diagrams/article/08-api-key-metadata.png)
 
-A useful consumer record has a stable key, a display name, a runtime credential
-reference, an allowed model list, a rate-limit tier or explicit limits, and
-enough workload metadata to identify it later. The credential value itself is not
-repository source. It belongs in whatever runtime secret system the environment
-already uses.
-
-Rotation should support overlap:
-
-1. add a new credential for the same consumer identity;
-2. move the application to the new credential;
-3. verify traffic and metrics still use the same `consumer_id`;
-4. disable or remove the old credential.
-
-Disable and revoke are different operations. Disable keeps the identity record
-and removes model access. Revoke invalidates the credential material. Disable is
-what you want for audit continuity. Revoke is what you need when a credential is
-exposed, or when you only suspect it is.
+Rotation is performed with overlap so no application outage occurs: add a second
+credential for the same consumer identity, move the application to it, confirm
+that traffic and metrics still report the same `consumer_id`, then remove the
+old credential.
 
 ![Consumer disable versus revoke](docs/assets/diagrams/article/16-consumer-disable-vs-revoke.png)
 
-Long-lived gateway keys do not belong in browser JavaScript. The pattern is:
+Disable and revoke are separate operations with different purposes. Disabling
+retains the identity record and removes model access, preserving audit
+continuity. Revoking invalidates the credential material and is required when a
+key is exposed or suspected of exposure.
 
-```text
-browser -> application backend -> gateway -> model
-```
-
-Use the CLI to produce the consumer operation plan, then update the runtime
-credential material through the environment's secret workflow:
+Removing a route policy is never the correct way to remove one consumer's access,
+because it would affect every consumer of that model and leave the route
+unprotected in the interim. The consumer's entitlement is changed instead.
 
 ```bash
 airgap-ai-gateway --config examples/config consumer add --consumer-key search-app
@@ -607,71 +591,52 @@ airgap-ai-gateway --config examples/config consumer revoke --consumer-key search
 
 Reference: [docs/consumer-lifecycle.md](docs/consumer-lifecycle.md).
 
-## Troubleshoot from response and status signals
+### 8.3 Troubleshooting
 
-Start from what the platform is already telling you.
+Because each control fails with a distinct signal, the response code identifies
+the responsible layer before any manifest is opened.
 
-A `401` is an identity problem. A `403` is an entitlement problem. A `404` is a
-Host, listener, or route match problem. A `429` means the descriptor and counter
-path is alive and doing its job. `ResolvedRefs=False`, `Attached=False`, and
-`Programmed=False` are not interchangeable either; each one points at a different
-ownership boundary.
+| Response | Most likely cause | Where to investigate |
+| --- | --- | --- |
+| `200` | Request passed policy and the model responded | No action required |
+| `400` | Request body does not match the model API | Client payload shape against the model's expected schema |
+| `401` | Missing, invalid, or revoked key | Header format, runtime Secret, credential reference |
+| `403` | Valid consumer, model permission denied | Consumer permission field, policy target, default-deny state |
+| `404` | Host or path did not match a route | Host header, listener hostname, route hostname and path, edge Host preservation |
+| `405` | Wrong HTTP method or endpoint | Route path and method match against the published model API |
+| `429` | Consumer rate limit enforced | Descriptor metadata, ratelimit service health, Redis reachability |
+| `500` / `502` / `503` | Gateway, Service, or model backend fault | Data-plane health, backend Service endpoints, model readiness |
+| Timeout | Network path, or a slow or unhealthy model | NetworkPolicies, model resource pressure, upstream timeouts |
 
-![HTTP response troubleshooting](docs/assets/diagrams/article/17-http-response-troubleshooting.png)
-
-The editable troubleshooting flow stays in Mermaid because operators end up
-updating it whenever a new condition, status, or policy type shows up.
+Kubernetes conditions narrow the remaining cases. `ResolvedRefs=False` means a
+route cannot resolve its backend reference, and no credential change will help
+until it does. `Attached=False` means a policy did not bind to its target, which
+a typo in `targetRef` will produce as a valid object protecting nothing.
+`Programmed=False` points at the controller or the generated data plane.
 
 ![HTTP and status troubleshooting flow](docs/assets/diagrams/rendered/http-status-troubleshooting-flow.svg)
 
-Use the response code first, then the conditions:
-
-- `401`: check missing key, unknown key, header format, runtime Secret, and
-  credential reference.
-- `403`: check known consumer, permission field, policy target, and default-deny
-  behavior.
-- `404`: check Host header, listener hostname, route hostname, path match, and
-  retained-edge Host preservation.
-- `429`: check descriptor metadata, rate-limit service health, Redis reachability,
-  and low-limit test isolation.
-- `ResolvedRefs=False`: check Service name, namespace, port, ReferenceGrant mode,
-  and CRD compatibility.
-- `Attached=False`: check policy `targetRef`, namespace, route existence, and
-  controller logs.
-- `Programmed=False`: check GatewayClass, CRDs, controller readiness, parameters,
-  generated data-plane rollout, and NetworkPolicies.
-
 Reference: [docs/troubleshooting.md](docs/troubleshooting.md).
 
-## Roll back without deleting model workloads
+### 8.4 Rollback and decommission
 
-Rollback has to know who owns what.
-
-The state ledger records whether a resource was created by the run, updated by
-the run, or already existed before it. That single distinction is what stops a
-rollback from deleting resources the gateway operation never owned.
-
-If a model Service existed before the gateway route was added, rollback removes
-the route and policy the run created and leaves the Service alone. If a Secret
-existed before the run and was changed through the approved workflow, rollback
-restores the recorded pre-change state instead of treating it as disposable.
+Rollback is driven by a state ledger that records, for every resource, whether it
+was created by the run, updated by the run, or already present beforehand. That
+record is what prevents recovery from deleting resources the gateway operation
+never owned — most importantly the model workloads themselves.
 
 ![Decommission order](docs/assets/diagrams/article/19-decommission-order.png)
 
-The rollback order is conservative on purpose:
+1. Restore the previous edge or exposure path.
+2. Confirm client traffic reaches the previous backend.
+3. Retain the gateway installation if it assists diagnosis.
+4. Restore updated resources from the snapshot.
+5. Delete only resources recorded as created by the selected run.
+6. Remove gateway resources once traffic no longer depends on them.
 
-1. restore the previous edge or exposure path;
-2. verify client traffic reaches the previous backend;
-3. keep the gateway installed if it helps diagnostics;
-4. restore updated resources from the snapshot;
-5. delete only resources proven to have been created by the selected run;
-6. remove gateway resources only after traffic no longer depends on them.
-
-The cleanup guard fails closed when edge or ingress state cannot be read. If the
-platform cannot prove that traffic no longer depends on the gateway, it does not
-get to remove gateway resources.
-
-Plan rollback from the saved state ledger:
+The cleanup guard fails closed when edge or ingress state cannot be read: absent
+proof that traffic no longer depends on the gateway, no gateway resources are
+removed.
 
 ```bash
 airgap-ai-gateway --config examples/config rollback plan \
@@ -679,11 +644,7 @@ airgap-ai-gateway --config examples/config rollback plan \
   --run-id run-1 \
   --apply-mode server-side-dry-run \
   --output-dir runs/plans/rollback
-```
 
-Apply only with the approved rollback plan, exact context, snapshot, and ledger:
-
-```bash
 airgap-ai-gateway --config examples/config rollback apply \
   --expected-context kind-airgap-ai-gateway \
   --apply-mode server-side-dry-run \
@@ -696,27 +657,9 @@ airgap-ai-gateway --config examples/config rollback apply \
 
 Reference: [docs/rollback.md](docs/rollback.md).
 
-## Architecture decisions
+---
 
-The ADRs are the design memory of this repository. They hold the decisions that
-should not be buried in YAML or left implied by a test name.
-
-Current decisions:
-
-- [ADR 0001: One Gateway, separate model routes](docs/adr/0001-one-gateway-separate-model-routes.md)
-- [ADR 0002: Chat versus embedding backends](docs/adr/0002-chat-vs-embedding-backends.md)
-- [ADR 0003: Staged cutover and rollback](docs/adr/0003-staged-cutover-and-rollback.md)
-- [ADR 0004: Air-gap artifacts outside Git](docs/adr/0004-airgap-artifacts-outside-git.md)
-- [ADR 0005: Secret management boundary](docs/adr/0005-secret-management-boundary.md)
-
-Read these before changing a platform boundary. If a later implementation needs a
-different route shape, backend pattern, cutover sequence, artifact boundary, or
-secret model, it should update the relevant ADR rather than only changing
-manifests.
-
-Reference: [docs/adr](docs/adr).
-
-## Repository layout
+## 9. Repository layout
 
 ```text
 .
@@ -734,9 +677,9 @@ Source, tests, documentation, schemas, and example reports are tracked. Runtime
 credentials, kubeconfig material, generated run directories, OCI archives, chart
 archives, wheelhouses, and offline bundle payloads are not.
 
-## Development workflow
+---
 
-Install the project:
+## 10. Development workflow
 
 ```bash
 python -m pip install -c constraints.txt -r requirements-dev.txt -e .
@@ -768,37 +711,73 @@ make docs-check
 python scripts/check_links.py --check-external README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs manifests lab
 ```
 
-Run the full local lab when Kubernetes behavior changes:
+Run the full local lab when Kubernetes behaviour changes:
 
 ```bash
 make kind-test
 ```
 
-Contribution expectations are described in [CONTRIBUTING.md](CONTRIBUTING.md).
+Contribution expectations: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Security policy
+---
 
-Security-sensitive changes include authentication, authorization, Secret
-handling, redaction, image provenance, registry promotion, context verification,
-apply gates, rollback behavior, and route exposure.
+## 11. Security
 
-The security policy covers the supported baseline, reporting expectations,
-secret-handling rules, and the checks that should run before review. The standard
-is simple: examples can be fake, but the behavior has to be real enough to test.
+Security-sensitive areas include authentication, authorization, Secret handling,
+redaction, image provenance, registry promotion, context verification, apply
+gates, rollback behaviour, and route exposure.
+
+One baseline limitation is stated explicitly rather than omitted: agentgateway
+v1.3.1 stores API keys as raw runtime credentials in Kubernetes Secret objects,
+which makes Secret protection part of the security boundary. Production use of
+this baseline requires Secret encryption at rest, least-privilege RBAC, external
+secret integration where available, rotation with overlap, and redaction in logs
+and reports. The v1.4.0 hashed-key path is the intended improvement and is
+tracked as a validation target.
 
 Reference: [SECURITY.md](SECURITY.md).
 
-## Changelog
+---
 
-Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+## 12. Architecture decisions
 
-## Article and upstream references
+Architecture Decision Records capture the reasoning behind platform boundaries,
+including the alternatives considered and rejected. A future implementation that
+needs a different route shape, backend pattern, cutover sequence, artefact
+boundary, or secret model should update the relevant record rather than only
+changing manifests.
 
-For the full implementation story and the reasoning behind the sequence:
+- [ADR 0001: One Gateway, separate model routes](docs/adr/0001-one-gateway-separate-model-routes.md)
+- [ADR 0002: Chat versus embedding backends](docs/adr/0002-chat-vs-embedding-backends.md)
+- [ADR 0003: Staged cutover and rollback](docs/adr/0003-staged-cutover-and-rollback.md)
+- [ADR 0004: Air-gap artifacts outside Git](docs/adr/0004-airgap-artifacts-outside-git.md)
+- [ADR 0005: Secret management boundary](docs/adr/0005-secret-management-boundary.md)
+
+---
+
+## 13. References
+
+Full implementation write-up:
 
 - [Building an Air-Gapped AI Gateway on Kubernetes with AgentGateway, Envoy, and NVIDIA NIM](https://medium.com/@ahmedmaherbf/building-an-air-gapped-ai-gateway-on-kubernetes-with-agentgateway-envoy-and-nvidia-nim-880141f333d5)
 
-Core upstream projects:
+Project documentation:
+
+| Document | Contents |
+| --- | --- |
+| [Architecture contract](docs/architecture.md) | Full architecture and ownership boundaries |
+| [Security model](docs/security-model.md) | Assets, trust boundaries, threats, and controls |
+| [Compatibility](docs/compatibility.md) | Version matrix, evidence, and upgrade risk |
+| [Deployment](docs/deployment.md) | Staged deployment and cutover runbook |
+| [Verification](docs/verification.md) | Static and runtime proof procedure |
+| [Rollback](docs/rollback.md) | Recovery and decommission order |
+| [Model onboarding](docs/model-onboarding.md) | Adding a model under default deny |
+| [Consumer lifecycle](docs/consumer-lifecycle.md) | Identity, rotation, disable, and revoke |
+| [Troubleshooting](docs/troubleshooting.md) | Signal-driven diagnosis |
+| [Air-gap bundle](docs/airgap-bundle.md) | Offline supply chain workflow |
+| [Disposable lab](docs/kind-e2e-lab.md) | Local behavioural proof environment |
+
+Upstream projects:
 
 | Component | Reference |
 | --- | --- |

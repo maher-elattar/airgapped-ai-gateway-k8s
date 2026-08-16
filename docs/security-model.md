@@ -6,7 +6,7 @@ identity, per-model authorization, rate-limit metadata, observability, and the
 handling of runtime credentials. What it must not become is a convenient place to
 hide unclear ownership behind a proxy.
 
-![Authentication, authorization, rate-limit, and backend decision flow](assets/diagrams/rendered/policy-decision-flow.svg)
+![Request evaluation through routing, authentication, authorization, rate limiting, and backend dispatch](assets/diagrams/rendered/policy-decision-flow.svg)
 
 ## Scope
 

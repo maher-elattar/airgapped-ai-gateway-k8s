@@ -1,30 +1,40 @@
 flowchart TD
-  request["Request enters gateway"]
-  host{"Host and path match a model route?"}
-  key{"API key present?"}
-  known{"Key maps to a consumer?"}
-  allowed{"Consumer has route permission?"}
-  limited{"Rate-limit counter exceeded?"}
-  backend{"Backend reference ready?"}
-  model["Forward to model backend"]
-  ok["200 response"]
-  missing["401 missing identity"]
-  unknown["401 unknown identity"]
-  denied["403 entitlement denied"]
-  tooMany["429 rate limit"]
-  notFound["404 no route"]
-  upstream["5xx or route condition diagnostic"]
+  request(["Request received at gateway listener"])
+  host{"Control 1 — Routing<br/>Host and path match a published model route?"}
+  present{"Control 2 — Authentication<br/>Credential presented?"}
+  resolves{"Credential resolves to a known consumer identity?"}
+  entitled{"Control 3 — Authorization<br/>Consumer entitled to this model route?"}
+  within{"Control 4 — Rate limiting<br/>Consumer within its quota for this descriptor?"}
+  resolved{"Backend dispatch<br/>Backend reference resolved and healthy?"}
+  forward["Forward request to model backend"]
+  success(["200 — model response returned"])
+
+  notFound["404 — no matching route"]
+  noCredential["401 — credential missing"]
+  unknown["401 — credential not recognised"]
+  denied["403 — model not entitled"]
+  throttled["429 — quota exceeded"]
+  upstream["5xx — backend fault or route condition"]
 
   request --> host
+  host -- "Yes" --> present
+  present -- "Yes" --> resolves
+  resolves -- "Yes" --> entitled
+  entitled -- "Yes" --> within
+  within -- "Yes" --> resolved
+  resolved -- "Yes" --> forward
+  forward --> success
+
   host -- "No" --> notFound
-  host -- "Yes" --> key
-  key -- "No" --> missing
-  key -- "Yes" --> known
-  known -- "No" --> unknown
-  known -- "Yes" --> allowed
-  allowed -- "No" --> denied
-  allowed -- "Yes" --> limited
-  limited -- "Yes" --> tooMany
-  limited -- "No" --> backend
-  backend -- "No" --> upstream
-  backend -- "Yes" --> model --> ok
+  present -- "No" --> noCredential
+  resolves -- "No" --> unknown
+  entitled -- "No" --> denied
+  within -- "No" --> throttled
+  resolved -- "No" --> upstream
+
+  classDef gate fill:#eef2fb,stroke:#3b5aa6,color:#1f2f57
+  classDef reject fill:#fdeded,stroke:#c0392b,color:#7b241c
+  classDef accept fill:#eaf6ec,stroke:#27ae60,color:#1e5631
+  class host,present,resolves,entitled,within,resolved gate
+  class notFound,noCredential,unknown,denied,throttled,upstream reject
+  class success accept

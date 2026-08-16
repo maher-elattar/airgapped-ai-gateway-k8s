@@ -1,25 +1,57 @@
 sequenceDiagram
   autonumber
-  participant Operator
-  participant CLI
-  participant Git as Authored source
+  actor Operator
+  participant CLI as Platform CLI
+  participant Source as Authored source
   participant API as Kubernetes API
   participant Gateway as agentgateway
-  participant Edge as Retained edge
+  participant Edge as Production edge
 
-  Operator->>CLI: discover
-  CLI-->>Operator: candidates and required overrides
-  Operator->>CLI: deploy plan
-  CLI->>Git: read config and manifests
-  CLI-->>Operator: deterministic JSON plan and Markdown summary
-  Operator->>CLI: deploy apply with expected context and confirmation
-  CLI->>API: save pre-change snapshot
-  CLI->>API: apply planned resources
-  CLI->>Gateway: poll Programmed, Accepted, ResolvedRefs, Attached
-  CLI-->>Operator: verification report
-  Operator->>CLI: cutover plan
-  CLI-->>Operator: edge change and rollback point
-  Operator->>CLI: cutover apply
-  CLI->>Edge: apply approved edge change
-  Operator->>CLI: rollback apply if validation fails
-  CLI->>API: restore pre-existing resources and delete only created resources
+  rect rgb(232, 240, 250)
+    Note over Operator, Edge: Stage 1 — Discover (read-only, no cluster mutation)
+    Operator->>CLI: discover
+    CLI->>API: read model Services, routes, edge state
+    API-->>CLI: observed environment
+    CLI-->>Operator: candidates and required overrides
+  end
+
+  rect rgb(232, 240, 250)
+    Note over Operator, Edge: Stage 2 — Plan (offline, reviewable, deterministic)
+    Operator->>CLI: deploy plan --overlay
+    CLI->>Source: read configuration and Kustomize overlay
+    Source-->>CLI: rendered manifests
+    CLI-->>Operator: plan.json and plan.md
+  end
+
+  rect rgb(252, 244, 227)
+    Note over Operator, Edge: Stage 3 — Apply (gated by context, token, approved plan)
+    Operator->>CLI: deploy apply --expected-context --confirm --plan-file
+    CLI->>API: capture pre-change snapshot
+    CLI->>API: apply only the actions listed in the plan
+    API->>Gateway: reconcile Gateway, routes, and policies
+  end
+
+  rect rgb(252, 244, 227)
+    Note over Operator, Edge: Stage 4 — Verify (internal path, production traffic untouched)
+    CLI->>Gateway: poll Programmed, Accepted, ResolvedRefs, Attached
+    Gateway-->>CLI: resource conditions
+    CLI->>Gateway: request matrix — 401, 403, 200, 429, 404
+    Gateway-->>CLI: observed responses
+    CLI-->>Operator: verification report
+  end
+
+  rect rgb(252, 244, 227)
+    Note over Operator, Edge: Stage 5 — Cut over (smallest production change)
+    Operator->>CLI: cutover plan
+    CLI-->>Operator: edge change and rollback anchor
+    Operator->>CLI: cutover apply
+    CLI->>Edge: repoint edge backend to the gateway Service
+  end
+
+  rect rgb(250, 235, 235)
+    Note over Operator, Edge: Stage 6 — Roll back (only when verification fails)
+    Operator->>CLI: rollback apply --ledger-file
+    CLI->>Edge: restore the previous edge backend first
+    CLI->>API: restore pre-existing state, delete only run-created resources
+    CLI-->>Operator: rollback report
+  end

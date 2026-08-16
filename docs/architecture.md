@@ -225,7 +225,7 @@ adds and tests a real user-delegation design later.
 The request decision path is also kept as an editable Mermaid diagram for
 operator documentation:
 
-![Authentication, authorization, rate-limit, and backend decision flow](assets/diagrams/rendered/policy-decision-flow.svg)
+![Request evaluation through routing, authentication, authorization, rate limiting, and backend dispatch](assets/diagrams/rendered/policy-decision-flow.svg)
 
 Each control answers one question:
 
@@ -331,16 +331,20 @@ through an approved runtime secret path.
 
 ## Troubleshooting starts from the response code
 
-![HTTP response troubleshooting table for gateway and model failures](assets/diagrams/article/17-http-response-troubleshooting.png)
+Each control fails with a distinct signal, so the response code identifies the
+responsible layer before any manifest is opened:
 
-The response code narrows the first step:
-
-- 401 starts with identity;
-- 403 starts with entitlement;
-- 404 starts with host, path, and route matching;
-- 405 starts with method or endpoint shape;
-- 429 starts with rate-limit descriptors and counters;
-- 500, 502, and 503 start with gateway, Service, or model backend health.
+| Response | Most likely cause | Where to investigate |
+| --- | --- | --- |
+| `200` | Request passed policy and the model responded | No action required |
+| `400` | Request body does not match the model API | Client payload shape against the model's expected schema |
+| `401` | Missing, invalid, or revoked key | Header format, runtime Secret, credential reference |
+| `403` | Valid consumer, model permission denied | Consumer permission field, policy target, default-deny state |
+| `404` | Host or path did not match a route | Host header, listener hostname, route hostname and path, edge Host preservation |
+| `405` | Wrong HTTP method or endpoint | Route path and method match against the published model API |
+| `429` | Consumer rate limit enforced | Descriptor metadata, ratelimit service health, Redis reachability |
+| `500` / `502` / `503` | Gateway, Service, or model backend fault | Data-plane health, backend Service endpoints, model readiness |
+| Timeout | Network path, or a slow or unhealthy model | NetworkPolicies, model resource pressure, upstream timeouts |
 
 ![Rate-limit troubleshooting flow ordered by response code, route state, policy target, and backend health](assets/diagrams/article/18-rate-limit-troubleshooting.png)
 
